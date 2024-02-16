@@ -1,10 +1,10 @@
 # Elevator Chime
 
-> Keeping it vertical,
-> forever elevator.
-> Riding the escalator
-> to the something that is greater.
->
-> <span style="text-align: right">Nujabes - Feather</span>
+> Keeping it vertical,<br/>
+> forever elevator.<br/>
+> Riding the escalator<br/>
+> to the something that is greater.<br/>
+
+<div style="text-align: right">Nujabes - Feather</div>
 
 Elevator Chime is a Zig reimplementation of [Chime](https://github.com/Dr-Nekoma/chime).
