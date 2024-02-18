@@ -73,7 +73,7 @@ pub fn load(vm: *@This(), target: enum { pc, a, r }) !i32 {
         .r => (try vm.return_stack.top()).pc,
     };
     return if (source < 0 or vm.ram.len <= source)
-        error.MemoryOutOfRange
+        error.AddressOutOfRange
     else
         vm.ram[@as(u32, @bitCast(source))];
 }
@@ -237,41 +237,32 @@ pub fn execute(vm: *@This()) !void {
 
 test "triangle numbers" {
     comptime var triangle_numbers_image = [_]i32{ // from the original chime repository
-        Code.from_slice(&.{ // 0
-            .literal,
-            .call,
-            .halt,
-        }).?.to_i32(),
+        Code.from_slice(
+            // 0
+            &.{ .literal, .call, .halt },
+        ).?.to_i32(),
         5,
         3,
-        Code.from_slice(&.{ // 3
-            .literal,
-            .jump,
-        }).?.to_i32(),
+        Code.from_slice(
+            // 3
+            &.{ .literal, .jump },
+        ).?.to_i32(),
         0,
         6,
-        Code.from_slice(&.{ // 6
-            .over,
-            .jump_zero,
-            .over,
-            .plus,
-            .push_r,
-            .literal,
-        }).?.to_i32(),
+        Code.from_slice(
+            // 6
+            &.{ .over, .jump_zero, .over, .plus, .push_r, .literal },
+        ).?.to_i32(),
         11,
         -1,
-        Code.from_slice(&.{ // 9
-            .plus,
-            .pop_r,
-            .jump,
-        }).?.to_i32(),
+        Code.from_slice(
+            &.{ .plus, .pop_r, .jump },
+        ).?.to_i32(),
         6,
-        Code.from_slice(&.{ // 11
-            .push_r,
-            .drop,
-            .pop_r,
-            .ret,
-        }).?.to_i32(),
+        Code.from_slice(
+            // 11
+            &.{ .push_r, .drop, .pop_r, .ret },
+        ).?.to_i32(),
     };
 
     comptime var vm_storage = VM{ .ram = &triangle_numbers_image };
