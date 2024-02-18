@@ -15,14 +15,14 @@ pub const Code = packed struct(Code_Int) {
     }
 
     test "code to i32 roundtrip" {
-        const initial = comptime try Code.from_slice(&.{
+        const initial = comptime Code.from_slice(&.{
             .literal,
             .call,
             .dup,
             .over,
             .plus,
             .halt,
-        });
+        }).?;
 
         const final = comptime Code.from_i32(initial.to_i32());
 
@@ -36,7 +36,7 @@ pub const Code = packed struct(Code_Int) {
     }
 
     test "the current op is the top bits in a code word" {
-        const code = comptime try from_slice(&.{.load_a_plus});
+        const code = comptime from_slice(&.{.load_a_plus}).?;
         try std.testing.expectEqual(0b10000, @intFromEnum(comptime code.current()));
     }
 
@@ -45,7 +45,7 @@ pub const Code = packed struct(Code_Int) {
     }
 
     test "stepping through a code word introduces a PC fetch" {
-        const initial = comptime try Code.from_slice(&(.{.literal} ** 6));
+        const initial = comptime Code.from_slice(&(.{.literal} ** 6)).?;
         const final = comptime Op.array_from_code(initial.step());
 
         try std.testing.expectEqual(Op.pc_fetch, final[final.len - 1]);
@@ -55,9 +55,9 @@ pub const Code = packed struct(Code_Int) {
         return .{ .int = code.int << Op.width | @intFromEnum(op) };
     }
 
-    pub fn from_slice(ops: []const Op) !Code {
+    pub fn from_slice(ops: []const Op) ?Code {
         return if (Op.per_word < ops.len)
-            error.InvalidArgument
+            null
         else result: {
             var word = Code{};
             for (0..Op.per_word) |index| {
@@ -103,7 +103,7 @@ pub const Op = enum(op_backing_type) {
             .pc_fetch,
         };
 
-        const code = comptime try Code.from_slice(&initial);
+        const code = comptime Code.from_slice(&initial).?;
         const final = comptime array_from_code(code);
         try std.testing.expectEqual(initial, final);
     }
