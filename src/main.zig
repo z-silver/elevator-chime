@@ -1,4 +1,5 @@
 const std = @import("std");
+const VM = @import("VM.zig");
 
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
@@ -11,7 +12,15 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
+    const sample_word = .{
+        .literal,
+        .call,
+        .halt,
+    };
+
+    const default_word = VM.Op.array_from_code(try VM.Code.from_slice(&sample_word));
+
+    try stdout.print("Run `zig build test` to run the tests.\n{any}\n{any}\n", .{ sample_word, default_word });
 
     try bw.flush(); // don't forget to flush!
 }
@@ -21,4 +30,10 @@ test "simple test" {
     defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
     try list.append(42);
     try std.testing.expectEqual(@as(i32, 42), list.pop());
+
+    var ram: [413]i32 = undefined;
+    var vm = VM{.ram = &ram};
+
+    _ = &vm;
+
 }
