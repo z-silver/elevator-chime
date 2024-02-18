@@ -274,3 +274,44 @@ test "triangle numbers" {
 
     try std.testing.expectEqual(15, try comptime vm.data_stack.top());
 }
+
+test "short multiplication" {
+    const shift_16_left = comptime [_]i32{Code.from_slice(
+        &(.{.double} ** 6),
+    ).?.to_i32()} ** 2 ++ .{
+        Code.from_slice(
+            &.{ .double, .double, .double, .double, .ret },
+        ).?.to_i32(),
+    };
+
+    comptime var short_multiplication = [_]i32{
+        Code.from_slice(
+            &.{ .literal, .literal, .call, .halt },
+        ).?.to_i32(),
+        413,
+        612,
+        4,
+        Code.from_slice(
+            // 4
+            &.{ .literal, .@"and", .push_r, .call, .pop_r, .plus_star },
+        ).?.to_i32(),
+        0xffff,
+        13,
+    } ++ .{Code.from_slice(
+        &(.{ .half, .plus_star } ** 3),
+    ).?.to_i32()} ** 5 ++ .{Code.from_slice(
+        &.{ .half, .push_r, .drop, .pop_r, .ret },
+    ).?.to_i32()} ++
+        // 13
+        shift_16_left;
+
+    comptime var vm_storage = VM{ .ram = &short_multiplication };
+    const vm = comptime &vm_storage;
+
+    const result = comptime vm.execute();
+
+    try std.testing.expectEqual(void{}, result);
+
+    // FIXME: for some reason, this program is returning 211456, which is 413 * 512
+    try std.testing.expectEqual(252756, try comptime vm.data_stack.top());
+}
