@@ -9,7 +9,7 @@
 
 Elevator Chime is a Zig reimplementation of [Chime](https://github.com/Dr-Nekoma/chime).
 
-Currently, we don't have syscalls. More test cases need to be written. There isn't a proper main function.
+Currently, we don't have syscalls. More test cases need to be written. There isn't a proper main function. We cannot parse source code, nor can we directly load compiled binaries.
 
 The only way to use this at the moment is to run `zig build test` from the command line.
 
