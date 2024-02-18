@@ -235,8 +235,8 @@ pub fn execute(vm: *@This()) !void {
     while (vm.is_running) try vm.step();
 }
 
-test "execution" {
-    comptime var triangle_numbers = [_]i32{ // from the original chime repository
+test "triangle numbers" {
+    comptime var triangle_numbers_image = [_]i32{ // from the original chime repository
         Code.from_slice(&.{ // 0
             .literal,
             .call,
@@ -274,7 +274,7 @@ test "execution" {
         }).?.to_i32(),
     };
 
-    comptime var vm_storage = VM{ .ram = &triangle_numbers };
+    comptime var vm_storage = VM{ .ram = &triangle_numbers_image };
     const vm = comptime &vm_storage;
 
     const result = comptime vm.execute();
