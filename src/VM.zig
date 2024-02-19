@@ -218,7 +218,7 @@ pub fn step(vm: *@This()) !void {
         .plus_star => {
             const top = try vm.data_stack.top2();
 
-            if (top[1] | 1 == 1) {
+            if (top[1] & 1 == 1) {
                 try vm.data_stack.pop();
                 try vm.data_stack.push(top[0] +% top[1]);
             }
@@ -312,6 +312,5 @@ test "short multiplication" {
 
     try std.testing.expectEqual(void{}, result);
 
-    // FIXME: for some reason, this program is returning 211456, which is 413 * 512
     try std.testing.expectEqual(252756, try comptime vm.data_stack.top());
 }
