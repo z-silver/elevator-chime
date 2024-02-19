@@ -66,7 +66,7 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
     };
 }
 
-pub fn load(vm: *@This(), target: enum { pc, a, r }) !i32 {
+fn load(vm: *@This(), target: enum { pc, a, r }) !i32 {
     const source = switch (target) {
         .pc => vm.pc,
         .a => vm.a,
@@ -78,7 +78,7 @@ pub fn load(vm: *@This(), target: enum { pc, a, r }) !i32 {
         vm.ram[@as(u32, @bitCast(source))];
 }
 
-pub fn store(vm: *@This(), target: enum { a, r }) !void {
+fn store(vm: *@This(), target: enum { a, r }) !void {
     const source = switch (target) {
         .a => vm.a,
         .r => (try vm.return_stack.top()).pc,
@@ -236,7 +236,7 @@ pub fn execute(vm: *@This()) !void {
 }
 
 test "triangle numbers" {
-    comptime var triangle_numbers_image = [_]i32{ // from the original chime repository
+    var triangle_numbers_image = [_]i32{ // from the original chime repository
         Code.from_slice(
             // 0
             &.{ .literal, .call, .halt },
@@ -265,18 +265,18 @@ test "triangle numbers" {
         ).?.to_i32(),
     };
 
-    comptime var vm_storage = VM{ .ram = &triangle_numbers_image };
-    const vm = comptime &vm_storage;
+    var vm_storage = VM{ .ram = &triangle_numbers_image };
+    const vm = &vm_storage;
 
-    const result = comptime vm.execute();
+    const result = vm.execute();
 
     try std.testing.expectEqual(void{}, result);
 
-    try std.testing.expectEqual(15, try comptime vm.data_stack.top());
+    try std.testing.expectEqual(@as(i32, 15), try vm.data_stack.top());
 }
 
 test "short multiplication" {
-    const shift_16_left = comptime [_]i32{Code.from_slice(
+    const shift_16_left = [_]i32{Code.from_slice(
         &(.{.double} ** 6),
     ).?.to_i32()} ** 2 ++ .{
         Code.from_slice(
@@ -284,7 +284,7 @@ test "short multiplication" {
         ).?.to_i32(),
     };
 
-    comptime var short_multiplication = [_]i32{
+    var short_multiplication = [_]i32{
         Code.from_slice(
             &.{ .literal, .literal, .call, .halt },
         ).?.to_i32(),
@@ -305,12 +305,12 @@ test "short multiplication" {
         // 13
         shift_16_left;
 
-    comptime var vm_storage = VM{ .ram = &short_multiplication };
-    const vm = comptime &vm_storage;
+    var vm_storage = VM{ .ram = &short_multiplication };
+    const vm = &vm_storage;
 
-    const result = comptime vm.execute();
+    const result = vm.execute();
 
     try std.testing.expectEqual(void{}, result);
 
-    try std.testing.expectEqual(252756, try comptime vm.data_stack.top());
+    try std.testing.expectEqual(@as(i32, 252756), try vm.data_stack.top());
 }
