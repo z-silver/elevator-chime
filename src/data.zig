@@ -15,7 +15,7 @@ pub const Code = packed struct(Code_Int) {
     }
 
     test "code to i32 roundtrip" {
-        const initial = comptime Code.from_slice(&.{
+        const initial = Code.from_slice(&.{
             .literal,
             .call,
             .dup,
@@ -24,7 +24,7 @@ pub const Code = packed struct(Code_Int) {
             .halt,
         }).?;
 
-        const final = comptime Code.from_i32(initial.to_i32());
+        const final = Code.from_i32(initial.to_i32());
 
         try std.testing.expectEqual(initial, final);
     }
@@ -36,8 +36,8 @@ pub const Code = packed struct(Code_Int) {
     }
 
     test "the current op is the top bits in a code word" {
-        const code = comptime from_slice(&.{.load_a_plus}).?;
-        try std.testing.expectEqual(0b10000, @intFromEnum(comptime code.current()));
+        const code = from_slice(&.{.load_a_plus}).?;
+        try std.testing.expectEqual(@as(Op.backing_type, 0b10000), @intFromEnum(code.current()));
     }
 
     pub fn step(code: Code) Code {
@@ -45,8 +45,8 @@ pub const Code = packed struct(Code_Int) {
     }
 
     test "stepping through a code word introduces a PC fetch" {
-        const initial = comptime Code.from_slice(&(.{.literal} ** 6)).?;
-        const final = comptime Op.array_from_code(initial.step());
+        const initial = Code.from_slice(&(.{.literal} ** 6)).?;
+        const final = Op.array_from_code(initial.step());
 
         try std.testing.expectEqual(Op.pc_fetch, final[final.len - 1]);
     }
@@ -103,13 +103,13 @@ pub const Op = enum(op_backing_type) {
             .pc_fetch,
         };
 
-        const code = comptime Code.from_slice(&initial).?;
-        const final = comptime array_from_code(code);
+        const code = Code.from_slice(&initial).?;
+        const final = array_from_code(code);
         try std.testing.expectEqual(initial, final);
     }
 
     test "defaults" {
-        const default_word = comptime Op.array_from_code(.{});
+        const default_word = Op.array_from_code(.{});
         try std.testing.expectEqual([_]Op{.pc_fetch} ** 6, default_word);
     }
 
