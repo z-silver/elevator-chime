@@ -107,17 +107,19 @@ pub fn step(vm: *@This()) !void {
             if (try vm.data_stack.top() == 0) {
                 vm.pc = try vm.load(.pc);
                 vm.isr = Code{};
+            } else {
+                vm.pc +%= 1;
             }
             try vm.data_stack.pop();
-            vm.pc +%= 1;
         },
         .jump_plus => {
             if (0 < try vm.data_stack.top()) {
                 vm.pc = try vm.load(.pc);
                 vm.isr = .{};
+            } else {
+                vm.pc +%= 1;
             }
             try vm.data_stack.pop();
-            vm.pc +%= 1;
         },
         .call => {
             try vm.return_stack.push(.{
