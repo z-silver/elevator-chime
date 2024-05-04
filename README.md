@@ -1,11 +1,11 @@
 # Elevator Chime
 
-> Keeping it vertical,<br/>
-> forever elevator.<br/>
-> Riding the escalator<br/>
-> to the something that is greater.<br/>
+> Keeping it vertical,<br>
+> forever elevator.<br>
+> Riding the escalator<br>
+> to the something that is greater.<br>
 
-<div style="text-align: right;">-- Nujabes & Cyne - Feather</div><br/>
+<div style="text-align: right;">-- Nujabes & Cyne - Feather</div><br>
 
 Elevator Chime is a Zig reimplementation of [Chime](https://github.com/Dr-Nekoma/chime).
 
@@ -13,4 +13,4 @@ Currently, we don't have syscalls. More test cases need to be written. There isn
 
 The only way to use this at the moment is to run `zig build test` from the command line.
 
-Written against Zig version `0.11.0`.
+Written against Zig version `0.12.0`.
