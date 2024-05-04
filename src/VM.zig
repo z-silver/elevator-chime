@@ -31,14 +31,14 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
         pub fn top(self: *const @This()) !T {
             return if (self.size == 0)
-                error.InvalidStackOperation
+                error.invalid_stack_operation
             else
                 self.array[self.size - 1];
         }
 
         pub fn top2(self: *const @This()) ![2]T {
             return if (self.size < 2)
-                error.InvalidStackOperation
+                error.invalid_stack_operation
             else
                 .{
                     self.array[self.size - 2],
@@ -48,49 +48,49 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
         pub fn push(self: *@This(), item: T) !void {
             if (self.size == capacity) {
-                return error.InvalidStackOperation;
+                return error.invalid_stack_operation;
             }
             self.array[self.size] = item;
             self.size += 1;
         }
 
         pub fn pop(self: *@This()) !void {
-            if (self.size == 0) return error.InvalidStackOperation;
+            if (self.size == 0) return error.invalid_stack_operation;
             self.size -= 1;
         }
 
         pub fn pop2(self: *@This()) !void {
-            if (self.size < 2) return error.InvalidStackOperation;
+            if (self.size < 2) return error.invalid_stack_operation;
             self.size -= 2;
         }
     };
 }
 
-fn load(vm: *@This(), target: enum { pc, a, r }) !i32 {
+fn load(vm: *@This(), comptime target: enum { pc, a, r }) !i32 {
     const source = switch (target) {
         .pc => vm.pc,
         .a => vm.a,
         .r => (try vm.return_stack.top()).pc,
     };
     return if (source < 0 or vm.ram.len <= source)
-        error.AddressOutOfRange
+        error.address_out_of_range
     else
         vm.ram[@as(u32, @bitCast(source))];
 }
 
-fn store(vm: *@This(), target: enum { a, r }) !void {
+fn store(vm: *@This(), comptime target: enum { a, r }) !void {
     const source = switch (target) {
         .a => vm.a,
         .r => (try vm.return_stack.top()).pc,
     };
-    if (source < 0 or vm.ram.len <= source) return error.MemoryOutOfRange;
+    if (source < 0 or vm.ram.len <= source) return error.address_out_of_range;
     const address: u32 = @bitCast(source);
     vm.ram[address] = try vm.data_stack.top();
     try vm.data_stack.pop();
 }
 
 pub fn step(vm: *@This()) !void {
-    if (!vm.is_running) return error.CannotStepAfterHalting;
+    if (!vm.is_running) return error.cannot_step_after_halting;
     const current_instruction = vm.isr.current();
     vm.isr = vm.isr.step();
 
@@ -228,7 +228,7 @@ pub fn step(vm: *@This()) !void {
         .nop => {},
         .syscall => {
             // FIXME
-            return error.SyscallsNotYetImplemented;
+            return error.syscalls_not_yet_implemented;
         },
     }
 }
