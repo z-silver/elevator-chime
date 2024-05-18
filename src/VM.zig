@@ -31,14 +31,14 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
         pub fn top(self: *const @This()) !T {
             return if (self.size == 0)
-                error.invalid_stack_operation
+                error.stack_underflow
             else
                 self.array[self.size - 1];
         }
 
         pub fn top2(self: *const @This()) ![2]T {
             return if (self.size < 2)
-                error.invalid_stack_operation
+                error.stack_underflow
             else
                 .{
                     self.array[self.size - 2],
@@ -48,19 +48,19 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
         pub fn push(self: *@This(), item: T) !void {
             if (self.size == capacity) {
-                return error.invalid_stack_operation;
+                return error.stack_overflow;
             }
             self.array[self.size] = item;
             self.size += 1;
         }
 
         pub fn pop(self: *@This()) !void {
-            if (self.size == 0) return error.invalid_stack_operation;
+            if (self.size == 0) return error.stack_underflow;
             self.size -= 1;
         }
 
         pub fn pop2(self: *@This()) !void {
-            if (self.size < 2) return error.invalid_stack_operation;
+            if (self.size < 2) return error.stack_underflow;
             self.size -= 2;
         }
     };
