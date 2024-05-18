@@ -18,7 +18,7 @@ pub fn main() !void {
         .halt,
     };
 
-    const default_word = VM.Op.array_from_code(try VM.Code.from_slice(&sample_word));
+    const default_word = VM.Op.array_from_code(VM.Code.from_slice(&sample_word).?);
 
     try stdout.print("Run `zig build test` to run the tests.\n{any}\n{any}\n", .{ sample_word, default_word });
 
