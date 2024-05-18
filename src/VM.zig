@@ -156,6 +156,12 @@ pub fn step(vm: *@This()) !void {
         .over => try vm.data_stack.push((try vm.data_stack.top2())[0]),
         .dup => try vm.data_stack.push(try vm.data_stack.top()),
         .drop => try vm.data_stack.pop(),
+        .swap => {
+            const vals = try vm.data_stack.top2();
+            try vm.data_stack.pop2();
+            try vm.data_stack.push(vals[1]);
+            try vm.data_stack.push(vals[0]);
+        },
         .load_a => try vm.data_stack.push(try vm.load(.a)),
         .store_a => try vm.store(.a),
         .load_a_plus => {

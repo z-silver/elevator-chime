@@ -134,6 +134,7 @@ pub const Op = enum(op_backing_type) {
     over = 11,
     dup = 12,
     drop = 13,
+    swap = 31,
 
     // Memory
     load_a = 14,
