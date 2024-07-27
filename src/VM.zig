@@ -1,6 +1,7 @@
 const std = @import("std");
 const Int = std.meta.Int;
 const data = @import("data.zig");
+
 pub const Op = data.Op;
 pub const Code = data.Code;
 
@@ -66,6 +67,12 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
     };
 }
 
+pub fn image_native_to_big(image: []i32) void {
+    for (image, 0..) |value, idx| {
+        image[idx] = std.mem.nativeToBig(value);
+    }
+}
+
 fn load(vm: *@This(), comptime target: enum { pc, a, r }) !i32 {
     const source = switch (target) {
         .pc => vm.pc,
@@ -75,7 +82,7 @@ fn load(vm: *@This(), comptime target: enum { pc, a, r }) !i32 {
     return if (source < 0 or vm.ram.len <= source)
         error.address_out_of_range
     else
-        vm.ram[@as(u32, @bitCast(source))];
+        std.mem.bigToNative(i32, vm.ram[@as(u32, @bitCast(source))]);
 }
 
 fn store(vm: *@This(), comptime target: enum { a, r }) !void {
@@ -85,7 +92,7 @@ fn store(vm: *@This(), comptime target: enum { a, r }) !void {
     };
     if (source < 0 or vm.ram.len <= source) return error.address_out_of_range;
     const address: u32 = @bitCast(source);
-    vm.ram[address] = try vm.data_stack.top();
+    vm.ram[address] = std.mem.nativeToBig(try vm.data_stack.top());
     try vm.data_stack.pop();
 }
 
@@ -273,6 +280,7 @@ test "triangle numbers" {
         ).?.to_i32(),
     };
 
+    image_native_to_big(&triangle_numbers_image);
     var vm_storage = VM{ .ram = &triangle_numbers_image };
     const vm = &vm_storage;
 
@@ -313,6 +321,7 @@ test "short multiplication" {
         // 13
         shift_16_left;
 
+    image_native_to_big(&short_multiplication);
     var vm_storage = VM{ .ram = &short_multiplication };
     const vm = &vm_storage;
 
