@@ -14,7 +14,7 @@ return_stack: Stack(64, Return_Frame) = .{},
 pc: i32 = 0,
 isr: Code = .{},
 a: i32 = 0,
-is_running: bool = true,
+done: bool = false,
 
 pub const Return_Frame = struct {
     pc: i32 = 0,
@@ -97,7 +97,7 @@ fn store(vm: *@This(), comptime target: enum { a, r }) !void {
 }
 
 pub fn step(vm: *@This()) !void {
-    if (!vm.is_running) return error.cannot_step_after_halting;
+    if (vm.done) return error.cannot_execute_after_halting;
     const current_instruction = vm.isr.current();
     vm.isr = vm.isr.step();
 
@@ -143,7 +143,7 @@ pub fn step(vm: *@This()) !void {
             vm.isr = target.isr;
         },
         .halt => {
-            vm.is_running = false;
+            vm.done = true;
         },
         .push_a => {
             vm.a = try vm.data_stack.top();
@@ -247,7 +247,7 @@ pub fn step(vm: *@This()) !void {
 }
 
 pub fn execute(vm: *@This()) !void {
-    while (vm.is_running) try vm.step();
+    while (!vm.done) try vm.step();
 }
 
 test "triangle numbers" {
