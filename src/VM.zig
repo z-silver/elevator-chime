@@ -69,7 +69,7 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
 pub fn image_native_to_big(image: []i32) void {
     for (image, 0..) |value, idx| {
-        image[idx] = std.mem.nativeToBig(value);
+        image[idx] = std.mem.nativeToBig(i32, value);
     }
 }
 
@@ -92,7 +92,7 @@ fn store(vm: *@This(), comptime target: enum { a, r }) !void {
     };
     if (source < 0 or vm.ram.len <= source) return error.address_out_of_range;
     const address: u32 = @bitCast(source);
-    vm.ram[address] = std.mem.nativeToBig(try vm.data_stack.top());
+    vm.ram[address] = std.mem.nativeToBig(i32, try vm.data_stack.top());
     try vm.data_stack.pop();
 }
 
