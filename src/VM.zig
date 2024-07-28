@@ -96,158 +96,247 @@ fn store(vm: *@This(), comptime target: enum { a, r }) !void {
     try vm.data_stack.pop();
 }
 
-pub fn step(vm: *@This()) !void {
-    if (vm.done) return error.cannot_execute_after_halting;
-    const current_instruction = vm.isr.current();
-    vm.isr = vm.isr.step();
+pub const Error = error{
+    stack_underflow,
+    stack_overflow,
+    address_out_of_range,
+    cannot_execute_after_halting,
+    syscalls_not_yet_implemented,
+};
 
-    switch (current_instruction) {
-        .pc_fetch => {
-            vm.isr = Code.from_i32(try vm.load(.pc));
-            vm.pc +%= 1;
-        },
-        .jump => {
+const instruction = struct {
+    fn pc_fetch(vm: *VM) Error!void {
+        vm.isr = Code.from_i32(try vm.load(.pc));
+        vm.pc +%= 1;
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn jump(vm: *VM) Error!void {
+        vm.pc = try vm.load(.pc);
+        vm.isr = Code{};
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn jump_zero(vm: *VM) Error!void {
+        if (try vm.data_stack.top() == 0) {
             vm.pc = try vm.load(.pc);
             vm.isr = Code{};
-        },
-        .jump_zero => {
-            if (try vm.data_stack.top() == 0) {
-                vm.pc = try vm.load(.pc);
-                vm.isr = Code{};
-            } else {
-                vm.pc +%= 1;
-            }
-            try vm.data_stack.pop();
-        },
-        .jump_plus => {
-            if (0 < try vm.data_stack.top()) {
-                vm.pc = try vm.load(.pc);
-                vm.isr = .{};
-            } else {
-                vm.pc +%= 1;
-            }
-            try vm.data_stack.pop();
-        },
-        .call => {
-            try vm.return_stack.push(.{
-                .pc = vm.pc +% 1,
-                .isr = vm.isr,
-            });
+        } else {
+            vm.pc +%= 1;
+        }
+        try vm.data_stack.pop();
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn jump_plus(vm: *VM) Error!void {
+        if (0 < try vm.data_stack.top()) {
             vm.pc = try vm.load(.pc);
             vm.isr = .{};
-        },
-        .ret => {
-            const target = try vm.return_stack.top();
-            try vm.return_stack.pop();
-            vm.pc = target.pc;
-            vm.isr = target.isr;
-        },
-        .halt => {
-            vm.done = true;
-        },
-        .push_a => {
-            vm.a = try vm.data_stack.top();
-            try vm.data_stack.pop();
-        },
-        .pop_a => {
-            try vm.data_stack.push(vm.a);
-        },
-        .push_r => {
-            try vm.return_stack.push(.{ .pc = try vm.data_stack.top() });
-            try vm.data_stack.pop();
-        },
-        .pop_r => {
-            try vm.data_stack.push((try vm.return_stack.top()).pc);
-            try vm.return_stack.pop();
-        },
-        .over => try vm.data_stack.push((try vm.data_stack.top2())[0]),
-        .dup => try vm.data_stack.push(try vm.data_stack.top()),
-        .drop => try vm.data_stack.pop(),
-        .swap => {
-            const top = try vm.data_stack.top2();
-            try vm.data_stack.pop2();
-            try vm.data_stack.push(top[1]);
-            try vm.data_stack.push(top[0]);
-        },
-        .load_a => try vm.data_stack.push(try vm.load(.a)),
-        .store_a => try vm.store(.a),
-        .load_a_plus => {
-            try vm.data_stack.push(try vm.load(.a));
-            vm.a +%= 1;
-        },
-        .store_a_plus => {
-            try vm.store(.a);
-            vm.a +%= 1;
-        },
-        .load_r_plus => {
-            const target = try vm.return_stack.top();
-            try vm.data_stack.push(try vm.load(.r));
-            try vm.return_stack.pop();
-            try vm.return_stack.push(.{ .pc = target.pc +% 1, .isr = target.isr });
-        },
-        .store_r_plus => {
-            const target = try vm.return_stack.top();
-            try vm.store(.r);
-            try vm.return_stack.pop();
-            try vm.return_stack.push(.{ .pc = target.pc +% 1, .isr = target.isr });
-        },
-        .literal => {
-            try vm.data_stack.push(try vm.load(.pc));
+        } else {
             vm.pc +%= 1;
-        },
-        .@"and" => {
-            const top = try vm.data_stack.top2();
-            try vm.data_stack.pop2();
-            try vm.data_stack.push(top[0] & top[1]);
-        },
-        .not => {
-            const top = try vm.data_stack.top();
-            try vm.data_stack.pop();
-            try vm.data_stack.push(~top);
-        },
-        .@"or" => {
-            const top = try vm.data_stack.top2();
-            try vm.data_stack.pop2();
-            try vm.data_stack.push(top[0] | top[1]);
-        },
-        .xor => {
-            const top = try vm.data_stack.top2();
-            try vm.data_stack.pop2();
-            try vm.data_stack.push(top[0] ^ top[1]);
-        },
-        .plus => {
-            const top = try vm.data_stack.top2();
-            try vm.data_stack.pop2();
-            try vm.data_stack.push(top[0] +% top[1]);
-        },
-        .double => {
-            const top = try vm.data_stack.top();
-            try vm.data_stack.pop();
-            try vm.data_stack.push(top << 1);
-        },
-        .half => {
-            const top = try vm.data_stack.top();
-            try vm.data_stack.pop();
-            try vm.data_stack.push(top >> 1);
-        },
-        .plus_star => {
-            const top = try vm.data_stack.top2();
-
-            if (top[1] & 1 == 1) {
-                try vm.data_stack.pop();
-                try vm.data_stack.push(top[0] +% top[1]);
-            }
-        },
-        .nop => {},
-        .syscall => {
-            // FIXME
-            return error.syscalls_not_yet_implemented;
-        },
+        }
+        try vm.data_stack.pop();
+        return @call(.always_tail, next, .{vm});
     }
-}
 
-pub fn execute(vm: *@This()) !void {
-    while (!vm.done) try vm.step();
+    fn call(vm: *VM) Error!void {
+        try vm.return_stack.push(.{
+            .pc = vm.pc +% 1,
+            .isr = vm.isr,
+        });
+        vm.pc = try vm.load(.pc);
+        vm.isr = .{};
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn ret(vm: *VM) Error!void {
+        const target = try vm.return_stack.top();
+        try vm.return_stack.pop();
+        vm.pc = target.pc;
+        vm.isr = target.isr;
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn halt(vm: *VM) Error!void {
+        vm.done = true;
+    }
+
+    fn push_a(vm: *VM) Error!void {
+        vm.a = try vm.data_stack.top();
+        try vm.data_stack.pop();
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn pop_a(vm: *VM) Error!void {
+        try vm.data_stack.push(vm.a);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn push_r(vm: *VM) Error!void {
+        try vm.return_stack.push(.{ .pc = try vm.data_stack.top() });
+        try vm.data_stack.pop();
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn pop_r(vm: *VM) Error!void {
+        try vm.data_stack.push((try vm.return_stack.top()).pc);
+        try vm.return_stack.pop();
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn over(vm: *VM) Error!void {
+        const value, _ = try vm.data_stack.top2();
+        try vm.data_stack.push(value);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn dup(vm: *VM) Error!void {
+        try vm.data_stack.push(try vm.data_stack.top());
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn drop(vm: *VM) Error!void {
+        try vm.data_stack.pop();
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn swap(vm: *VM) Error!void {
+        const top = try vm.data_stack.top2();
+        try vm.data_stack.pop2();
+        try vm.data_stack.push(top[1]);
+        try vm.data_stack.push(top[0]);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn load_a(vm: *VM) Error!void {
+        try vm.data_stack.push(try vm.load(.a));
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn store_a(vm: *VM) Error!void {
+        try vm.store(.a);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn load_a_plus(vm: *VM) Error!void {
+        try vm.data_stack.push(try vm.load(.a));
+        vm.a +%= 1;
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn store_a_plus(vm: *VM) Error!void {
+        try vm.store(.a);
+        vm.a +%= 1;
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn load_r_plus(vm: *VM) Error!void {
+        const target = try vm.return_stack.top();
+        try vm.data_stack.push(try vm.load(.r));
+        try vm.return_stack.pop();
+        try vm.return_stack.push(.{ .pc = target.pc +% 1, .isr = target.isr });
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn store_r_plus(vm: *VM) Error!void {
+        const target = try vm.return_stack.top();
+        try vm.store(.r);
+        try vm.return_stack.pop();
+        try vm.return_stack.push(.{ .pc = target.pc +% 1, .isr = target.isr });
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn literal(vm: *VM) Error!void {
+        try vm.data_stack.push(try vm.load(.pc));
+        vm.pc +%= 1;
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn @"and"(vm: *VM) Error!void {
+        const top = try vm.data_stack.top2();
+        try vm.data_stack.pop2();
+        try vm.data_stack.push(top[0] & top[1]);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn not(vm: *VM) Error!void {
+        const top = try vm.data_stack.top();
+        try vm.data_stack.pop();
+        try vm.data_stack.push(~top);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn @"or"(vm: *VM) Error!void {
+        const top = try vm.data_stack.top2();
+        try vm.data_stack.pop2();
+        try vm.data_stack.push(top[0] | top[1]);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn xor(vm: *VM) Error!void {
+        const top = try vm.data_stack.top2();
+        try vm.data_stack.pop2();
+        try vm.data_stack.push(top[0] ^ top[1]);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn plus(vm: *VM) Error!void {
+        const top = try vm.data_stack.top2();
+        try vm.data_stack.pop2();
+        try vm.data_stack.push(top[0] +% top[1]);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn double(vm: *VM) Error!void {
+        const top = try vm.data_stack.top();
+        try vm.data_stack.pop();
+        try vm.data_stack.push(top << 1);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn half(vm: *VM) Error!void {
+        const top = try vm.data_stack.top();
+        try vm.data_stack.pop();
+        try vm.data_stack.push(top >> 1);
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn plus_star(vm: *VM) Error!void {
+        const top = try vm.data_stack.top2();
+
+        if (top[1] & 1 == 1) {
+            try vm.data_stack.pop();
+            try vm.data_stack.push(top[0] +% top[1]);
+        }
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn nop(vm: *VM) Error!void {
+        return @call(.always_tail, next, .{vm});
+    }
+
+    fn syscall(_: *VM) Error!void {
+        // FIXME
+        return error.syscalls_not_yet_implemented;
+    }
+
+    pub inline fn next(vm: *VM) Error!void {
+        if (vm.done) return error.cannot_execute_after_halting;
+        const current_instruction = vm.isr.current();
+        vm.isr = vm.isr.step();
+
+        return switch (current_instruction) {
+            inline else => |inst| @call(
+                .always_tail,
+                @field(instruction, @tagName(inst)),
+                .{vm},
+            ),
+        };
+    }
+};
+
+pub fn run(vm: *@This()) Error!void {
+    return @call(.always_tail, instruction.next, .{vm});
 }
 
 test "triangle numbers" {
@@ -284,7 +373,7 @@ test "triangle numbers" {
     var vm_storage = VM{ .ram = &triangle_numbers_image };
     const vm = &vm_storage;
 
-    const result = vm.execute();
+    const result = vm.run();
 
     try std.testing.expectEqual(void{}, result);
 
@@ -325,7 +414,7 @@ test "short multiplication" {
     var vm_storage = VM{ .ram = &short_multiplication };
     const vm = &vm_storage;
 
-    const result = vm.execute();
+    const result = vm.run();
 
     try std.testing.expectEqual(void{}, result);
 
