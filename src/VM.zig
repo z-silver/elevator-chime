@@ -97,21 +97,43 @@ fn store(vm: *@This(), comptime target: enum { a, r }) !void {
     try vm.data_stack.pop();
 }
 
+fn buffer_at(vm: *@This(), address: i32) ![]u8 {
+    const uaddress: u32 = @bitCast(address);
+
+    if (vm.ram.len <= uaddress) return error.address_out_of_range;
+
+    const bytes_len: u32 = @bitCast(std.mem.bigToNative(i32, vm.ram[uaddress]));
+    return std.mem.sliceAsBytes(vm.ram[uaddress + 1 ..])[0..bytes_len];
+}
+
 pub const Error = error{
     stack_underflow,
     stack_overflow,
     address_out_of_range,
     cannot_execute_after_halting,
     unknown_syscall,
+    syscall_failed, // maybe this shouldn't be here
 };
 
 const system = struct {
-    pub fn read(_: *VM) Error!void {
-        unreachable;
+    pub fn read(vm: *VM) Error!void {
+        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
+        vm.data_stack.pop2() catch unreachable;
+        const buf = try vm.buffer_at(buf_addr);
+        const bytes_read = std.posix.read(fd, buf) catch
+            return error.syscall_failed;
+        vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_read)))) catch
+            unreachable;
     }
 
-    pub fn write(_: *VM) Error!void {
-        unreachable;
+    pub fn write(vm: *VM) Error!void {
+        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
+        vm.data_stack.pop2() catch unreachable;
+        const buf = try vm.buffer_at(buf_addr);
+        const bytes_written = std.posix.write(fd, buf) catch
+            return error.syscall_failed;
+        vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_written)))) catch
+            unreachable;
     }
 };
 
