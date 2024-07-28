@@ -17,7 +17,7 @@ a: i32 = 0,
 done: bool = false,
 
 pub const Return_Frame = struct {
-    pc: i32 = 0,
+    pc: i32,
     isr: Code = .{},
 };
 
