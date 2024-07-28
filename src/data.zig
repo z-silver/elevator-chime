@@ -75,6 +75,17 @@ pub const Code = packed struct(Code_Int) {
 
 const op_backing_type = u5;
 
+pub const Syscall = enum(u32) {
+    read = 0,
+    write = 1,
+
+    // TODO: implement these
+    // open = 2,
+    // semget = 64,
+    // semop = 65,
+    // semctl = 66,
+};
+
 pub const Op = enum(op_backing_type) {
     pub const backing_type = op_backing_type;
     pub const width = @bitSizeOf(backing_type);

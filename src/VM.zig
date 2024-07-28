@@ -4,6 +4,7 @@ const data = @import("data.zig");
 
 pub const Op = data.Op;
 pub const Code = data.Code;
+pub const Syscall = data.Syscall;
 
 const VM = @This();
 
@@ -101,7 +102,17 @@ pub const Error = error{
     stack_overflow,
     address_out_of_range,
     cannot_execute_after_halting,
-    syscalls_not_yet_implemented,
+    unknown_syscall,
+};
+
+const system = struct {
+    pub fn read(_: *VM) Error!void {
+        unreachable;
+    }
+
+    pub fn write(_: *VM) Error!void {
+        unreachable;
+    }
 };
 
 const instruction = struct {
@@ -315,9 +326,15 @@ const instruction = struct {
         return @call(.always_tail, next, .{vm});
     }
 
-    fn syscall(_: *VM) Error!void {
-        // FIXME
-        return error.syscalls_not_yet_implemented;
+    fn syscall(vm: *VM) Error!void {
+        const top: u32 = @bitCast(try vm.data_stack.top());
+        const syscall_id = std.meta.intToEnum(Syscall, top) catch
+            return error.unknown_syscall;
+        try vm.data_stack.pop();
+        try switch (syscall_id) {
+            inline else => |id| @field(system, @tagName(id))(vm),
+        };
+        return @call(.always_tail, next, .{vm});
     }
 
     pub inline fn next(vm: *VM) Error!void {
