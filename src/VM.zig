@@ -338,7 +338,6 @@ const instruction = struct {
     }
 
     pub inline fn next(vm: *VM) Error!void {
-        if (vm.done) return error.cannot_execute_after_halting;
         const current_instruction = vm.isr.current();
         vm.isr = vm.isr.step();
 
@@ -353,7 +352,10 @@ const instruction = struct {
 };
 
 pub fn run(vm: *@This()) Error!void {
-    return @call(.always_tail, instruction.next, .{vm});
+    return if (vm.done)
+        error.cannot_execute_after_halting
+    else
+        @call(.always_tail, instruction.next, .{vm});
 }
 
 test "triangle numbers" {
