@@ -135,7 +135,7 @@ const instruction = struct {
         } else {
             vm.pc +%= 1;
         }
-        try vm.data_stack.pop();
+        vm.data_stack.pop() catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -146,7 +146,7 @@ const instruction = struct {
         } else {
             vm.pc +%= 1;
         }
-        try vm.data_stack.pop();
+        vm.data_stack.pop() catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -162,7 +162,7 @@ const instruction = struct {
 
     fn ret(vm: *VM) Error!void {
         const target = try vm.return_stack.top();
-        try vm.return_stack.pop();
+        vm.return_stack.pop() catch unreachable;
         vm.pc = target.pc;
         vm.isr = target.isr;
         return @call(.always_tail, next, .{vm});
@@ -174,7 +174,7 @@ const instruction = struct {
 
     fn push_a(vm: *VM) Error!void {
         vm.a = try vm.data_stack.top();
-        try vm.data_stack.pop();
+        vm.data_stack.pop() catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -185,13 +185,13 @@ const instruction = struct {
 
     fn push_r(vm: *VM) Error!void {
         try vm.return_stack.push(.{ .pc = try vm.data_stack.top() });
-        try vm.data_stack.pop();
+        vm.data_stack.pop() catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn pop_r(vm: *VM) Error!void {
         try vm.data_stack.push((try vm.return_stack.top()).pc);
-        try vm.return_stack.pop();
+        vm.return_stack.pop() catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -213,9 +213,9 @@ const instruction = struct {
 
     fn swap(vm: *VM) Error!void {
         const top = try vm.data_stack.top2();
-        try vm.data_stack.pop2();
-        try vm.data_stack.push(top[1]);
-        try vm.data_stack.push(top[0]);
+        vm.data_stack.pop2() catch unreachable;
+        vm.data_stack.push(top[1]) catch unreachable;
+        vm.data_stack.push(top[0]) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -244,16 +244,22 @@ const instruction = struct {
     fn load_r_plus(vm: *VM) Error!void {
         const target = try vm.return_stack.top();
         try vm.data_stack.push(try vm.load(.r));
-        try vm.return_stack.pop();
-        try vm.return_stack.push(.{ .pc = target.pc +% 1, .isr = target.isr });
+        vm.return_stack.pop() catch unreachable;
+        vm.return_stack.push(.{
+            .pc = target.pc +% 1,
+            .isr = target.isr,
+        }) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn store_r_plus(vm: *VM) Error!void {
         const target = try vm.return_stack.top();
         try vm.store(.r);
-        try vm.return_stack.pop();
-        try vm.return_stack.push(.{ .pc = target.pc +% 1, .isr = target.isr });
+        vm.return_stack.pop() catch unreachable;
+        vm.return_stack.push(.{
+            .pc = target.pc +% 1,
+            .isr = target.isr,
+        }) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -265,50 +271,50 @@ const instruction = struct {
 
     fn @"and"(vm: *VM) Error!void {
         const top = try vm.data_stack.top2();
-        try vm.data_stack.pop2();
-        try vm.data_stack.push(top[0] & top[1]);
+        vm.data_stack.pop2() catch unreachable;
+        vm.data_stack.push(top[0] & top[1]) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn not(vm: *VM) Error!void {
         const top = try vm.data_stack.top();
-        try vm.data_stack.pop();
-        try vm.data_stack.push(~top);
+        vm.data_stack.pop() catch unreachable;
+        vm.data_stack.push(~top) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn @"or"(vm: *VM) Error!void {
         const top = try vm.data_stack.top2();
-        try vm.data_stack.pop2();
-        try vm.data_stack.push(top[0] | top[1]);
+        vm.data_stack.pop2() catch unreachable;
+        vm.data_stack.push(top[0] | top[1]) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn xor(vm: *VM) Error!void {
         const top = try vm.data_stack.top2();
-        try vm.data_stack.pop2();
-        try vm.data_stack.push(top[0] ^ top[1]);
+        vm.data_stack.pop2() catch unreachable;
+        vm.data_stack.push(top[0] ^ top[1]) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn plus(vm: *VM) Error!void {
         const top = try vm.data_stack.top2();
-        try vm.data_stack.pop2();
-        try vm.data_stack.push(top[0] +% top[1]);
+        vm.data_stack.pop2() catch unreachable;
+        vm.data_stack.push(top[0] +% top[1]) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn double(vm: *VM) Error!void {
         const top = try vm.data_stack.top();
-        try vm.data_stack.pop();
-        try vm.data_stack.push(top << 1);
+        vm.data_stack.pop() catch unreachable;
+        vm.data_stack.push(top << 1) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
     fn half(vm: *VM) Error!void {
         const top = try vm.data_stack.top();
-        try vm.data_stack.pop();
-        try vm.data_stack.push(top >> 1);
+        vm.data_stack.pop() catch unreachable;
+        vm.data_stack.push(top >> 1) catch unreachable;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -316,8 +322,8 @@ const instruction = struct {
         const top = try vm.data_stack.top2();
 
         if (top[1] & 1 == 1) {
-            try vm.data_stack.pop();
-            try vm.data_stack.push(top[0] +% top[1]);
+            vm.data_stack.pop() catch unreachable;
+            vm.data_stack.push(top[0] +% top[1]) catch unreachable;
         }
         return @call(.always_tail, next, .{vm});
     }
@@ -330,7 +336,7 @@ const instruction = struct {
         const top: u32 = @bitCast(try vm.data_stack.top());
         const syscall_id = std.meta.intToEnum(Syscall, top) catch
             return error.unknown_syscall;
-        try vm.data_stack.pop();
+        vm.data_stack.pop() catch unreachable;
         try switch (syscall_id) {
             inline else => |id| @field(system, @tagName(id))(vm),
         };
