@@ -13,4 +13,4 @@ Currently, we don't have syscalls. More test cases need to be written. There isn
 
 The only way to use this at the moment is to run `zig build test` from the command line.
 
-Written against Zig version `0.12.0`.
+Written against Zig version `0.12.1`.
