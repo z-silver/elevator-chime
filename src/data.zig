@@ -29,6 +29,13 @@ pub const Code = packed struct(Code_Int) {
         try std.testing.expectEqual(initial, final);
     }
 
+    test "i32 to code roundtrip" {
+        const bits: u32 = 0b10000_01001_10101_10100_00000_00;
+        const initial: i32 = @bitCast(bits);
+        const final = Code.from_i32(initial).to_i32();
+        try std.testing.expectEqual(initial, final);
+    }
+
     pub fn current(code: Code) Op {
         return @enumFromInt(@as(u5, @truncate(
             code.int >> (@bitSizeOf(Op) * (Op.per_word - 1)),
