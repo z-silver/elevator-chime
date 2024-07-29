@@ -116,7 +116,7 @@ inline fn store(
     vm.data_stack.pop() catch unreachable;
 }
 
-inline fn buffer_at(vm: *@This(), addr: i32) ![]u8 {
+fn buffer_at(vm: *@This(), addr: i32) ![]u8 {
     const bytes_len: u32 = @bitCast(try vm.load(.{ .mem = addr }));
     const uaddr = vm.address(addr) catch unreachable;
     return std.mem.sliceAsBytes(vm.ram[uaddr + 1 ..])[0..bytes_len];
