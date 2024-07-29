@@ -82,36 +82,44 @@ pub fn image_native_to_big(image: []i32) void {
     }
 }
 
-fn load(vm: *@This(), comptime target: enum { pc, a, r }) !i32 {
+fn address(vm: *VM, n: i32) !u32 {
+    return if (n < 0 or vm.ram.len <= n)
+        error.address_out_of_range
+    else
+        @bitCast(n);
+}
+
+inline fn load(
+    vm: *@This(),
+    target: union(enum) { pc: void, a: void, r: void, mem: i32 },
+) !i32 {
     const source = switch (target) {
         .pc => vm.pc,
         .a => vm.a,
         .r => (try vm.return_stack.top()).pc,
+        .mem => |addr| addr,
     };
-    return if (source < 0 or vm.ram.len <= source)
-        error.address_out_of_range
-    else
-        std.mem.bigToNative(i32, vm.ram[@as(u32, @bitCast(source))]);
+    return std.mem.bigToNative(i32, vm.ram[try vm.address(source)]);
 }
 
-fn store(vm: *@This(), comptime target: enum { a, r }) !void {
+inline fn store(
+    vm: *VM,
+    target: union(enum) { a: void, r: void, mem: i32 },
+) !void {
     const source = switch (target) {
         .a => vm.a,
         .r => (try vm.return_stack.top()).pc,
+        .mem => |addr| addr,
     };
-    if (source < 0 or vm.ram.len <= source) return error.address_out_of_range;
-    const address: u32 = @bitCast(source);
-    vm.ram[address] = std.mem.nativeToBig(i32, try vm.data_stack.top());
-    try vm.data_stack.pop();
+    vm.ram[try vm.address(source)] =
+        std.mem.nativeToBig(i32, try vm.data_stack.top());
+    vm.data_stack.pop() catch unreachable;
 }
 
-fn buffer_at(vm: *@This(), address: i32) ![]u8 {
-    const uaddress: u32 = @bitCast(address);
-
-    if (vm.ram.len <= uaddress) return error.address_out_of_range;
-
-    const bytes_len: u32 = @bitCast(std.mem.bigToNative(i32, vm.ram[uaddress]));
-    return std.mem.sliceAsBytes(vm.ram[uaddress + 1 ..])[0..bytes_len];
+inline fn buffer_at(vm: *@This(), addr: i32) ![]u8 {
+    const bytes_len: u32 = @bitCast(try vm.load(.{ .mem = addr }));
+    const uaddr = vm.address(addr) catch unreachable;
+    return std.mem.sliceAsBytes(vm.ram[uaddr + 1 ..])[0..bytes_len];
 }
 
 pub const Error = Data_Stack.Error || Return_Stack.Error || error{
