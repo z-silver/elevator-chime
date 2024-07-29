@@ -387,7 +387,8 @@ pub fn run(vm: *@This()) Error!void {
 }
 
 test "triangle numbers" {
-    var triangle_numbers_image = [_]i32{ // from the original chime repository
+    var triangle_numbers_image = comptime [_]i32{
+        // from the original chime repository
         Code.from_slice(
             // 0
             &.{ .literal, .call, .halt },
@@ -428,7 +429,7 @@ test "triangle numbers" {
 }
 
 test "short multiplication" {
-    const shift_16_left = [_]i32{Code.from_slice(
+    const shift_16_left = comptime [_]i32{Code.from_slice(
         &(.{.double} ** 6),
     ).?.to_i32()} ** 2 ++ .{
         Code.from_slice(
@@ -436,7 +437,7 @@ test "short multiplication" {
         ).?.to_i32(),
     };
 
-    var short_multiplication = [_]i32{
+    var short_multiplication = comptime [_]i32{
         Code.from_slice(
             &.{ .literal, .literal, .call, .halt },
         ).?.to_i32(),
