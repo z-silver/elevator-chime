@@ -10,12 +10,15 @@ const VM = @This();
 
 ram: []i32,
 
-data_stack: Stack(64, i32) = .{},
-return_stack: Stack(64, Return_Frame) = .{},
+data_stack: Data_Stack = .{},
+return_stack: Return_Stack = .{},
 pc: i32 = 0,
 isr: Code = .{},
 a: i32 = 0,
 done: bool = false,
+
+const Data_Stack = Stack(64, i32);
+const Return_Stack = Stack(64, Return_Frame);
 
 pub const Return_Frame = struct {
     pc: i32,
@@ -31,14 +34,19 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
         pub const capacity: Stack_Size = n;
 
-        pub fn top(self: *const @This()) error{stack_underflow}!T {
+        pub const Underflow_Error = error{stack_underflow};
+        pub const Overflow_Error = error{stack_overflow};
+
+        pub const Error = Underflow_Error || Overflow_Error;
+
+        pub fn top(self: *const @This()) Underflow_Error!T {
             return if (self.size == 0)
                 error.stack_underflow
             else
                 self.array[self.size - 1];
         }
 
-        pub fn top2(self: *const @This()) error{stack_underflow}![2]T {
+        pub fn top2(self: *const @This()) Underflow_Error![2]T {
             return if (self.size < 2)
                 error.stack_underflow
             else
@@ -48,7 +56,7 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
                 };
         }
 
-        pub fn push(self: *@This(), item: T) error{stack_overflow}!void {
+        pub fn push(self: *@This(), item: T) Overflow_Error!void {
             if (self.size == capacity) {
                 return error.stack_overflow;
             }
@@ -56,12 +64,12 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
             self.size += 1;
         }
 
-        pub fn pop(self: *@This()) error{stack_underflow}!void {
+        pub fn pop(self: *@This()) Underflow_Error!void {
             if (self.size == 0) return error.stack_underflow;
             self.size -= 1;
         }
 
-        pub fn pop2(self: *@This()) error{stack_underflow}!void {
+        pub fn pop2(self: *@This()) Underflow_Error!void {
             if (self.size < 2) return error.stack_underflow;
             self.size -= 2;
         }
@@ -106,9 +114,7 @@ fn buffer_at(vm: *@This(), address: i32) ![]u8 {
     return std.mem.sliceAsBytes(vm.ram[uaddress + 1 ..])[0..bytes_len];
 }
 
-pub const Error = error{
-    stack_underflow,
-    stack_overflow,
+pub const Error = Data_Stack.Error || Return_Stack.Error || error{
     address_out_of_range,
     cannot_execute_after_halting,
     unknown_syscall,
