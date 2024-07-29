@@ -5,22 +5,15 @@ pub fn main() !void {
     const buffer_init: [32]u8 = "00000000000000000000000000000\n\x00\x00".*;
     std.debug.print("buffer: {s}", .{&buffer_init});
     var echo_image = [_]i32{
-        VM.Code.from_slice(&.{
-            .literal,
-            .literal,
-            .literal,
-            .syscall,
-        }).?.to_i32(),
+        VM.Code.from_slice(
+            &.{ .literal, .literal, .literal, .syscall },
+        ).?.to_i32(),
         8,
         0, // stdin
         @intFromEnum(VM.Syscall.read),
-        VM.Code.from_slice(&.{
-            .literal,
-            .literal,
-            .literal,
-            .syscall,
-            .halt,
-        }).?.to_i32(),
+        VM.Code.from_slice(
+            &.{ .literal, .literal, .literal, .syscall, .halt },
+        ).?.to_i32(),
         8,
         1, // stdout
         @intFromEnum(VM.Syscall.write),
