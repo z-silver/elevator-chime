@@ -13,4 +13,4 @@ Elevator Chime is a Zig reimplementation of [Chime](https://github.com/Dr-Nekoma
 
 `zig build run` will execute the read syscall example program.
 
-Written against Zig version `0.12.1`.
+Written against Zig version `0.13.0`.
