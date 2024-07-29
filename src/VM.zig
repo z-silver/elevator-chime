@@ -90,7 +90,7 @@ fn address(vm: *VM, n: i32) !u32 {
 }
 
 inline fn load(
-    vm: *@This(),
+    vm: *VM,
     target: union(enum) { pc: void, a: void, r: void, mem: i32 },
 ) !i32 {
     const source = switch (target) {
@@ -116,7 +116,7 @@ inline fn store(
     vm.data_stack.pop() catch unreachable;
 }
 
-fn buffer_at(vm: *@This(), addr: i32) ![]u8 {
+fn buffer_at(vm: *VM, addr: i32) ![]u8 {
     const bytes_len: u32 = @bitCast(try vm.load(.{ .mem = addr }));
     const uaddr = vm.address(addr) catch unreachable;
     return std.mem.sliceAsBytes(vm.ram[uaddr + 1 ..])[0..bytes_len];
@@ -393,7 +393,7 @@ const instruction = struct {
     }
 };
 
-pub fn run(vm: *@This()) Error!void {
+pub fn run(vm: *VM) Error!void {
     return if (vm.done)
         error.cannot_execute_after_halting
     else
