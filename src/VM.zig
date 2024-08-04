@@ -1,6 +1,7 @@
 const std = @import("std");
 const Int = std.meta.Int;
 const data = @import("data.zig");
+const execution = @import("execution.zig");
 
 pub const Op = data.Op;
 pub const Code = data.Code;
@@ -89,7 +90,7 @@ fn address(vm: *VM, n: i32) !u32 {
         @bitCast(n);
 }
 
-inline fn load(
+pub fn load(
     vm: *VM,
     target: union(enum) { pc: void, a: void, r: void, mem: i32 },
 ) !i32 {
@@ -102,7 +103,7 @@ inline fn load(
     return std.mem.bigToNative(i32, vm.ram[try vm.address(source)]);
 }
 
-inline fn store(
+pub fn store(
     vm: *VM,
     target: union(enum) { a: void, r: void, mem: i32 },
 ) !void {
@@ -116,7 +117,7 @@ inline fn store(
     vm.data_stack.pop() catch unreachable;
 }
 
-fn buffer_at(vm: *VM, addr: i32) ![]u8 {
+pub fn buffer_at(vm: *VM, addr: i32) ![]u8 {
     const bytes_len: u32 = @bitCast(try vm.load(.{ .mem = addr }));
     const uaddr = vm.address(addr) catch unreachable;
     return std.mem.sliceAsBytes(vm.ram[uaddr + 1 ..])[0..bytes_len];
@@ -129,275 +130,11 @@ pub const Error = Data_Stack.Error || Return_Stack.Error || error{
     syscall_failed, // maybe this shouldn't be here
 };
 
-const system = struct {
-    pub fn read(vm: *VM) Error!void {
-        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        const buf = try vm.buffer_at(buf_addr);
-        const bytes_read = std.posix.read(fd, buf) catch
-            return error.syscall_failed;
-        vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_read)))) catch
-            unreachable;
-    }
-
-    pub fn write(vm: *VM) Error!void {
-        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        const buf = try vm.buffer_at(buf_addr);
-        const bytes_written = std.posix.write(fd, buf) catch
-            return error.syscall_failed;
-        vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_written)))) catch
-            unreachable;
-    }
-};
-
-const instruction = struct {
-    fn pc_fetch(vm: *VM) Error!void {
-        vm.isr = Code.from_i32(try vm.load(.pc));
-        vm.pc +%= 1;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn jump(vm: *VM) Error!void {
-        vm.pc = try vm.load(.pc);
-        vm.isr = Code{};
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn jump_zero(vm: *VM) Error!void {
-        if (try vm.data_stack.top() == 0) {
-            vm.pc = try vm.load(.pc);
-            vm.isr = Code{};
-        } else {
-            vm.pc +%= 1;
-        }
-        vm.data_stack.pop() catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn jump_plus(vm: *VM) Error!void {
-        if (0 < try vm.data_stack.top()) {
-            vm.pc = try vm.load(.pc);
-            vm.isr = .{};
-        } else {
-            vm.pc +%= 1;
-        }
-        vm.data_stack.pop() catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn call(vm: *VM) Error!void {
-        try vm.return_stack.push(.{
-            .pc = vm.pc +% 1,
-            .isr = vm.isr,
-        });
-        vm.pc = try vm.load(.pc);
-        vm.isr = .{};
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn ret(vm: *VM) Error!void {
-        const target = try vm.return_stack.top();
-        vm.return_stack.pop() catch unreachable;
-        vm.pc = target.pc;
-        vm.isr = target.isr;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn halt(vm: *VM) Error!void {
-        vm.done = true;
-    }
-
-    fn push_a(vm: *VM) Error!void {
-        vm.a = try vm.data_stack.top();
-        vm.data_stack.pop() catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn pop_a(vm: *VM) Error!void {
-        try vm.data_stack.push(vm.a);
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn push_r(vm: *VM) Error!void {
-        try vm.return_stack.push(.{ .pc = try vm.data_stack.top() });
-        vm.data_stack.pop() catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn pop_r(vm: *VM) Error!void {
-        try vm.data_stack.push((try vm.return_stack.top()).pc);
-        vm.return_stack.pop() catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn over(vm: *VM) Error!void {
-        const value, _ = try vm.data_stack.top2();
-        try vm.data_stack.push(value);
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn dup(vm: *VM) Error!void {
-        try vm.data_stack.push(try vm.data_stack.top());
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn drop(vm: *VM) Error!void {
-        try vm.data_stack.pop();
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn swap(vm: *VM) Error!void {
-        const top = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        vm.data_stack.push(top[1]) catch unreachable;
-        vm.data_stack.push(top[0]) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn load_a(vm: *VM) Error!void {
-        try vm.data_stack.push(try vm.load(.a));
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn store_a(vm: *VM) Error!void {
-        try vm.store(.a);
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn load_a_plus(vm: *VM) Error!void {
-        try vm.data_stack.push(try vm.load(.a));
-        vm.a +%= 1;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn store_a_plus(vm: *VM) Error!void {
-        try vm.store(.a);
-        vm.a +%= 1;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn load_r_plus(vm: *VM) Error!void {
-        const target = try vm.return_stack.top();
-        try vm.data_stack.push(try vm.load(.r));
-        vm.return_stack.pop() catch unreachable;
-        vm.return_stack.push(.{
-            .pc = target.pc +% 1,
-            .isr = target.isr,
-        }) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn store_r_plus(vm: *VM) Error!void {
-        const target = try vm.return_stack.top();
-        try vm.store(.r);
-        vm.return_stack.pop() catch unreachable;
-        vm.return_stack.push(.{
-            .pc = target.pc +% 1,
-            .isr = target.isr,
-        }) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn literal(vm: *VM) Error!void {
-        try vm.data_stack.push(try vm.load(.pc));
-        vm.pc +%= 1;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn @"and"(vm: *VM) Error!void {
-        const top = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        vm.data_stack.push(top[0] & top[1]) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn not(vm: *VM) Error!void {
-        const top = try vm.data_stack.top();
-        vm.data_stack.pop() catch unreachable;
-        vm.data_stack.push(~top) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn @"or"(vm: *VM) Error!void {
-        const top = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        vm.data_stack.push(top[0] | top[1]) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn xor(vm: *VM) Error!void {
-        const top = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        vm.data_stack.push(top[0] ^ top[1]) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn plus(vm: *VM) Error!void {
-        const top = try vm.data_stack.top2();
-        vm.data_stack.pop2() catch unreachable;
-        vm.data_stack.push(top[0] +% top[1]) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn double(vm: *VM) Error!void {
-        const top = try vm.data_stack.top();
-        vm.data_stack.pop() catch unreachable;
-        vm.data_stack.push(top << 1) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn half(vm: *VM) Error!void {
-        const top = try vm.data_stack.top();
-        vm.data_stack.pop() catch unreachable;
-        vm.data_stack.push(top >> 1) catch unreachable;
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn plus_star(vm: *VM) Error!void {
-        const top = try vm.data_stack.top2();
-
-        if (top[1] & 1 == 1) {
-            vm.data_stack.pop() catch unreachable;
-            vm.data_stack.push(top[0] +% top[1]) catch unreachable;
-        }
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn nop(vm: *VM) Error!void {
-        return @call(.always_tail, next, .{vm});
-    }
-
-    fn syscall(vm: *VM) Error!void {
-        const top: u32 = @bitCast(try vm.data_stack.top());
-        const syscall_id = std.meta.intToEnum(Syscall, top) catch
-            return error.unknown_syscall;
-        vm.data_stack.pop() catch unreachable;
-        try switch (syscall_id) {
-            inline else => |id| @field(system, @tagName(id))(vm),
-        };
-        return @call(.always_tail, next, .{vm});
-    }
-
-    pub inline fn next(vm: *VM) Error!void {
-        const current_instruction = vm.isr.current();
-        vm.isr = vm.isr.step();
-
-        return switch (current_instruction) {
-            inline else => |inst| @call(
-                .always_tail,
-                @field(instruction, @tagName(inst)),
-                .{vm},
-            ),
-        };
-    }
-};
-
 pub fn run(vm: *VM) Error!void {
     return if (vm.done)
         error.cannot_execute_after_halting
     else
-        @call(.always_tail, instruction.next, .{vm});
+        @call(.always_tail, execution.start, .{vm});
 }
 
 test "triangle numbers" {
