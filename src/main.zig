@@ -1,5 +1,6 @@
 const std = @import("std");
 const VM = @import("VM.zig");
+const chaff = @import("chaff.zig");
 
 pub fn main() !void {
     var echo_image = comptime [_]i32{
