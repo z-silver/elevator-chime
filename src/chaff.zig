@@ -9,6 +9,7 @@ dialect: Dialect = lemos_dialect,
 
 pub const Dialect = std.StaticStringMap(data.Op);
 pub const Environment = std.StringHashMap(i32);
+const Memory = std.ArrayList(i32);
 
 pub const lemos_dialect = Dialect.initComptime(.{
     .{ "fetch", .pc_fetch },
@@ -61,7 +62,7 @@ const whitespace = std.StaticStringMap(void).initComptime(
 
 fn free_keys_and_deinit(
     allocator: std.mem.Allocator,
-    map: *std.StringHashMap(u32),
+    map: *Environment,
 ) void {
     var keys = map.keyIterator();
     while (keys.next()) |key| {
@@ -70,22 +71,62 @@ fn free_keys_and_deinit(
     map.deinit();
 }
 
-fn string_line_size(_: []const u8) u32 {
-    //FIXME
-    return 1;
+fn any_whitespace(subject: []const u8) []const u8 {
+    return for (subject, 0..) |character, index| {
+        if (!whitespace.has(character))
+            break subject[index..];
+    } else subject;
 }
 
-fn line_size(line: []const u8) u32 {
+const With_Capture = struct {
+    capture: []const u8,
+    remainder: []const u8,
+};
+
+fn one_word(subject: []const u8) ?With_Capture {
+    const no_leading_whitespace = any_whitespace(subject);
+    return if (no_leading_whitespace.len == 0)
+        null
+    else for (no_leading_whitespace, 0..) |character, index| {
+        if (whitespace.has(character)) {
+            assert(index != 0);
+            break .{
+                .capture = no_leading_whitespace[0 .. index - 1],
+                .remainder = no_leading_whitespace[index..],
+            };
+        }
+    } else .{
+        .capture = no_leading_whitespace,
+        .remainder = "",
+    };
+}
+
+fn string_line_size(line: []const u8) !u32 {
+    return if (one_word(line)) |word| blk: {
+        const capture, const remainder = word;
+        break :blk switch (capture[0]) {
+            ':' => @call(.always_tail, string_line_size, .{remainder}),
+            '"' => unreachable, // FIXME
+            else => error.not_actually_a_string,
+        };
+    } else error.empty_line;
+}
+
+fn line_size(line: []const u8) !u32 {
     var words = std.mem.tokenizeAny(line, " \t\r");
     if (words.peek() == null) return 0;
     return while (words.next()) |word| {
         break switch (word[0]) {
             '>' => 0,
             ':' => continue,
-            '"' => string_line_size(line),
+            '"' => try string_line_size(line),
             else => 1,
         };
     } else 1;
+}
+
+fn parse_line(_: []const u8) !i32 {
+    unreachable; // FIXME
 }
 
 fn collect_names(
@@ -98,19 +139,35 @@ fn collect_names(
     while (lines.next()) |line| {
         var words = std.mem.tokenizeAny(u8, line, " \t\r");
         if (words.peek()) |word| {
-            if (switch (word[0]) {
-                ':' => labels,
-                '>' => constants,
-                else => null,
-            }) |target| {
-                const entry = try target.getOrPut(word[1..]);
-                if (entry.found_existing) return error.name_collision;
-
-                entry.value_ptr.* = memory_address;
+            switch (word[0]) {
+                ':' => {
+                    const entry = try labels.getOrPut(word[1..]);
+                    if (entry.found_existing) return error.label_collision;
+                    entry.value_ptr.* = memory_address;
+                },
+                '>' => {
+                    const entry = try constants.getOrPut(word[1..]);
+                    if (entry.found_existing) return error.constant_collision;
+                    entry.value_ptr.* = try parse_line(line);
+                },
+                else => {},
             }
             memory_address +%= try line_size(line);
         }
     }
+}
+
+fn assemble(
+    labels: *Environment,
+    constants: *Environment,
+    source: []const u8,
+    memory: *Memory,
+) !void {
+    _ = memory; // autofix
+    _ = source; // autofix
+    _ = constants; // autofix
+    _ = labels; // autofix
+    unreachable;
 }
 
 pub fn parse(
@@ -121,7 +178,7 @@ pub fn parse(
     assert(source.len < std.math.maxInt(u32) + 2);
     const allocator = self.allocator;
 
-    var memory = std.ArrayList(i32).init(allocator);
+    var memory = Memory.init(allocator);
     errdefer memory.deinit();
 
     var labels = Environment.init(allocator);
@@ -131,6 +188,7 @@ pub fn parse(
     defer free_keys_and_deinit(allocator, &constants);
 
     try collect_names(&labels, &constants, source);
+    try assemble(&labels, &constants, source, &memory);
 
     return memory.toOwnedSlice();
 }
