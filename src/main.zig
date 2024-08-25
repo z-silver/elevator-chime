@@ -26,3 +26,8 @@ pub fn main() !void {
 
     try vm.run();
 }
+
+test "everything" {
+    std.testing.refAllDecls(VM);
+    std.testing.refAllDecls(chaff);
+}
