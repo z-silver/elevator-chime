@@ -110,7 +110,7 @@ pub const Op = enum(op_backing_type) {
     }
 
     test "op array roundtrip" {
-        const initial = [_]Op{
+        const initial = [per_word]Op{
             .literal,
             .literal,
             .plus,
@@ -119,14 +119,13 @@ pub const Op = enum(op_backing_type) {
             .pc_fetch,
         };
 
-        const code = Code.from_slice(&initial).?;
-        const final = array_from_code(code);
-        try std.testing.expectEqual(initial, final);
+        const code = comptime Code.from_slice(&initial).?;
+        comptime try std.testing.expectEqual(initial, array_from_code(code));
     }
 
-    test "defaults" {
+    test "op defaults" {
         const default_word = Op.array_from_code(.{});
-        try std.testing.expectEqual([_]Op{.pc_fetch} ** 6, default_word);
+        try std.testing.expectEqual([_]Op{.pc_fetch} ** per_word, default_word);
     }
 
     test "PC fetch instruction is represented as 0" {
