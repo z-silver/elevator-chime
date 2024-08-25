@@ -100,13 +100,11 @@ pub const Op = enum(op_backing_type) {
     pub const leftover_bits = 32 % width;
 
     pub fn array_from_code(word: Code) [per_word]Op {
-        const uword: u32 = @bitCast(word.to_i32());
+        var word_buf = word;
         var ops: [per_word]Op = undefined;
-        for (0..per_word) |index| {
-            const reverse_index = per_word - index - 1;
-            const offset: u5 = @truncate(reverse_index * width + leftover_bits);
-            const op_number: u5 = @truncate(uword >> offset);
-            ops[index] = @enumFromInt(op_number);
+        for (&ops) |*op| {
+            op.* = word_buf.current();
+            word_buf = word_buf.step();
         }
         return ops;
     }
