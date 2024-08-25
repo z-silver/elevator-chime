@@ -133,10 +133,14 @@ fn collect_names(
     labels: *Environment,
     constants: *Environment,
     source: []const u8,
+    error_position: *u32,
 ) !void {
     var memory_address: i32 = 0;
     var lines = std.mem.tokenizeScalar(u8, source, '\n');
+    var current_line: u32 = 0;
+    errdefer error_position.* = current_line;
     while (lines.next()) |line| {
+        current_line +|= 1;
         var words = std.mem.tokenizeAny(u8, line, " \t\r");
         if (words.peek()) |word| {
             switch (word[0]) {
@@ -162,7 +166,9 @@ fn assemble(
     constants: *Environment,
     source: []const u8,
     memory: *Memory,
+    error_position: *u32,
 ) !void {
+    _ = error_position; // autofix
     _ = memory; // autofix
     _ = source; // autofix
     _ = constants; // autofix
@@ -173,8 +179,8 @@ fn assemble(
 pub fn parse(
     self: Chaff,
     source: []const u8,
+    error_position: *u32,
 ) ![]i32 {
-    // TODO: report the line number in which an error occurred
     assert(source.len < std.math.maxInt(u32) + 2);
     const allocator = self.allocator;
 
@@ -187,8 +193,8 @@ pub fn parse(
     var constants = Environment.init(allocator);
     defer free_keys_and_deinit(allocator, &constants);
 
-    try collect_names(&labels, &constants, source);
-    try assemble(&labels, &constants, source, &memory);
+    try collect_names(&labels, &constants, source, error_position);
+    try assemble(&labels, &constants, source, &memory, error_position);
 
     return memory.toOwnedSlice();
 }
