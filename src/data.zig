@@ -6,12 +6,12 @@ pub const Code_Int = Int(.unsigned, 32 - Op.leftover_bits);
 pub const Code = packed struct(Code_Int) {
     int: Code_Int = 0,
 
-    pub fn from_i32(word: i32) Code {
+    pub inline fn from_i32(word: i32) Code {
         return .{ .int = @truncate(@as(u32, @bitCast(word)) >> Op.leftover_bits) };
     }
 
-    pub fn to_i32(code: Code) i32 {
-        return @bitCast(@as(u32, code.int) << Op.leftover_bits);
+    pub inline fn to_i32(code: Code) i32 {
+        return @bitCast(@shlExact(@as(u32, code.int), Op.leftover_bits));
     }
 
     test "code to i32 roundtrip" {
@@ -36,8 +36,8 @@ pub const Code = packed struct(Code_Int) {
         try std.testing.expectEqual(initial, final);
     }
 
-    pub fn current(code: Code) Op {
-        return @enumFromInt(@as(u5, @truncate(
+    pub inline fn current(code: Code) Op {
+        return @enumFromInt(@as(op_backing_type, @truncate(
             code.int >> (@bitSizeOf(Op) * (Op.per_word - 1)),
         )));
     }
@@ -47,7 +47,7 @@ pub const Code = packed struct(Code_Int) {
         try std.testing.expectEqual(@as(Op.backing_type, 0b10000), @intFromEnum(code.current()));
     }
 
-    pub fn step(code: Code) Code {
+    pub inline fn step(code: Code) Code {
         return .{ .int = code.int << Op.width };
     }
 
@@ -58,7 +58,7 @@ pub const Code = packed struct(Code_Int) {
         try std.testing.expectEqual(Op.pc_fetch, final[final.len - 1]);
     }
 
-    pub fn add(code: Code, op: Op) Code {
+    pub inline fn add(code: Code, op: Op) Code {
         return .{ .int = code.int << Op.width | @intFromEnum(op) };
     }
 
