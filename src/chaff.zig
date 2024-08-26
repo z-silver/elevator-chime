@@ -3,8 +3,16 @@ const data = @import("data.zig");
 const assert = std.debug.assert;
 
 pub const Dialect = std.StaticStringMap(data.Op);
-pub const Environment = std.StringHashMap(i32);
 const Memory = std.ArrayList(i32);
+const Environment = std.StringHashMap(i32);
+const Fixups = std.AutoHashMap(
+    i32,
+    union(enum) { label: []const u8, constant: []const u8 },
+);
+
+fn current_address(items: []const i32) i32 {
+    return @bitCast(@as(u32, @intCast(items.len)));
+}
 
 pub fn parse(
     allocator: std.mem.Allocator,
@@ -12,108 +20,98 @@ pub fn parse(
     source: []const u8,
     error_position: *u32,
 ) ![]i32 {
-    var parser = try Parser.init(
-        allocator,
-        dialect,
-        source,
-        error_position,
-    );
-    defer parser.deinit();
-    return parser.run();
-}
+    var current_line: u32 = 0;
+    errdefer error_position.* = current_line;
 
-const Parser = struct {
-    allocator: std.mem.Allocator,
-    dialect: Dialect,
-    source: []const u8,
-    error_position: *u32,
-    labels: Environment,
-    constants: Environment,
-    memory: Memory,
+    if (std.math.maxInt(u32) + 1 < source.len) {
+        return error.source_too_large;
+    }
+    var memory = Memory.init(allocator);
+    defer memory.deinit();
 
-    pub fn init(
-        allocator: std.mem.Allocator,
-        dialect: Dialect,
-        source: []const u8,
-        error_position: *u32,
-    ) !Parser {
-        assert(source.len < std.math.maxInt(u32) + 2);
-        var memory = Memory.init(allocator);
-        errdefer memory.deinit();
+    var fixups = Fixups.init(allocator);
+    defer fixups.deinit();
 
-        var labels = Environment.init(allocator);
-        errdefer labels.deinit();
+    var labels = Environment.init(allocator);
+    defer free_keys_and_deinit(allocator, &labels);
 
-        var constants = Environment.init(allocator);
-        errdefer constants.deinit();
+    var constants = Environment.init(allocator);
+    defer free_keys_and_deinit(allocator, &constants);
 
-        return .{
-            .allocator = allocator,
-            .dialect = dialect,
-            .memory = memory,
-            .labels = labels,
-            .constants = constants,
-            .error_position = error_position,
-            .source = source,
+    var remaining = source;
+    while (one_line(remaining)) |line_and_remaining| {
+        const line, remaining = line_and_remaining;
+        current_line += 1;
+        if (std.mem.indexOfScalar(u8, line, '\r')) |_|
+            return error.line_contains_carriage_return;
+        const word, const rest = one_word(line) orelse continue;
+        const subject = switch (word[0]) {
+            ':' => blk: {
+                const entry = try labels.getOrPut(word[1..]);
+                if (entry.found_existing) return error.label_collision;
+                entry.value_ptr.* = current_address(memory.items);
+                break :blk rest;
+            },
+            '>' => {
+                const entry = try constants.getOrPut(word[1..]);
+                if (entry.found_existing) return error.constant_collision;
+                entry.value_ptr.* = switch (try one_cell_or_string(dialect, rest)) {
+                    .cell => |cell| cell,
+                    else => return error.invalid_constant,
+                };
+                continue;
+            },
+            else => line,
+        };
+        switch (try one_cell_or_string(dialect, subject)) {
+            .cell => |cell| try memory.append(cell),
+            .string => |string| {
+                assert(string.len < std.math.maxInt(u32));
+                const length_in_memory: u32 = @intCast(string.len);
+                const almost_words = string.len >> 2;
+                const trailing = string.len & 0b11;
+                const words = almost_words + @intFromBool(trailing != 0);
+                try memory.ensureUnusedCapacity(words + 1);
+                memory.appendAssumeCapacity(@bitCast(length_in_memory));
+                const target = memory.addManyAsSliceAssumeCapacity(words);
+                @memcpy(
+                    std.mem.asBytes(target[0..almost_words]),
+                    string[0 .. string.len - trailing],
+                );
+                if (trailing != 0) {
+                    var final_item = std.mem.zeroes([4]u8);
+                    @memcpy(final_item[0..trailing], string[string.len - trailing ..]);
+                    target[target.len - 1] = @bitCast(final_item);
+                }
+            },
+            .label => |label| {
+                try fixups.putNoClobber(
+                    current_address(memory.items),
+                    .{ .label = label },
+                );
+                try memory.append(0);
+            },
+            .constant => |constant| {
+                try fixups.putNoClobber(
+                    current_address(memory.items),
+                    .{ .constant = constant },
+                );
+                try memory.append(0);
+            },
+        }
+    }
+    var fixes = fixups.iterator();
+    while (fixes.next()) |fix| {
+        const address: u32 = @bitCast(fix.key_ptr.*);
+        memory.items[address] = switch (fix.value_ptr.*) {
+            .constant => |name| constants.get(name) orelse
+                return error.undefined_constant,
+            .label => |name| labels.get(name) orelse
+                return error.undefined_label,
         };
     }
-
-    pub fn deinit(self: *Parser) void {
-        self.memory.deinit();
-        free_keys_and_deinit(self.allocator, &self.labels);
-        free_keys_and_deinit(self.allocator, &self.constants);
-    }
-
-    pub fn run(self: *Parser) ![]i32 {
-        try self.collect_names();
-        try self.assemble();
-        return self.memory.toOwnedSlice();
-    }
-
-    fn collect_names(self: *Parser) !void {
-        var memory_address: i32 = 0;
-        var lines = std.mem.tokenizeScalar(u8, self.source, '\n');
-        var current_line: u32 = 0;
-        errdefer self.error_position.* = current_line;
-        while (lines.next()) |line| {
-            current_line +|= 1;
-            var words = std.mem.tokenizeAny(u8, line, " \t\r");
-            if (words.peek()) |word| {
-                switch (word[0]) {
-                    ':' => {
-                        const entry = try self.labels.getOrPut(word[1..]);
-                        if (entry.found_existing) return error.label_collision;
-                        entry.value_ptr.* = memory_address;
-                    },
-                    '>' => {
-                        const entry = try self.constants.getOrPut(word[1..]);
-                        if (entry.found_existing) return error.constant_collision;
-                        entry.value_ptr.* = try parse_line(line);
-                    },
-                    else => {},
-                }
-                memory_address +%= @bitCast(try line_size(line));
-            }
-        }
-    }
-
-    fn assemble(self: *Parser) !void {
-        _ = self; // autofix
-        unreachable;
-    }
-
-    fn free_keys_and_deinit(
-        allocator: std.mem.Allocator,
-        map: *Environment,
-    ) void {
-        var keys = map.keyIterator();
-        while (keys.next()) |key| {
-            allocator.free(key.*);
-        }
-        map.deinit();
-    }
-};
-
+    return memory.toOwnedSlice();
+}
 
 pub const lemos_dialect = Dialect.initComptime(.{
     .{ "fetch", .pc_fetch },
@@ -160,9 +158,10 @@ comptime {
     assert(instruction_set.eql(Instruction_Set.initFull()));
 }
 
-const whitespace = std.StaticStringMap(void).initComptime(
-    .{ .{" "}, .{"\t"}, .{"\n"}, .{"\r"} },
-);
+const whitespace = std.StaticStringMap(void).initComptime(.{
+    .{" "},
+    .{"\t"},
+});
 
 fn any_whitespace(subject: []const u8) []const u8 {
     return for (subject, 0..) |character, index| {
@@ -176,7 +175,20 @@ const With_Capture = struct {
     remainder: []const u8,
 };
 
-fn one_word(subject: []const u8) ?With_Capture {
+fn one_line(subject: []const u8) ?[2][]const u8 {
+    return if (subject.len == 0)
+        null
+    else for (subject, 0..) |character, index| {
+        if (character != '\n') continue;
+        break .{
+            subject[0 .. index -
+                @intFromBool(index != 0 and subject[index - 1] == '\r')],
+            subject[index + 1 ..],
+        };
+    } else .{ subject, &.{} };
+}
+
+fn one_word(subject: []const u8) ?[2][]const u8 {
     const no_leading_whitespace = any_whitespace(subject);
     return if (no_leading_whitespace.len == 0)
         null
@@ -184,50 +196,29 @@ fn one_word(subject: []const u8) ?With_Capture {
         if (whitespace.has(&.{character})) {
             assert(index != 0);
             break .{
-                .capture = no_leading_whitespace[0 .. index - 1],
-                .remainder = no_leading_whitespace[index..],
+                no_leading_whitespace[0 .. index - 1],
+                no_leading_whitespace[index..],
             };
         }
-    } else .{
-        .capture = no_leading_whitespace,
-        .remainder = "",
-    };
+    } else .{ no_leading_whitespace, &.{} };
 }
 
-fn string_line_size_impl(comptime nested: bool, line: []const u8) !u32 {
-    if (one_word(line)) |word| {
-        return switch (word.capture[0]) {
-            ':' => if (nested)
-                error.invalid_line
-            else
-                string_line_size_impl(true, word.remainder),
-            '"' => unreachable, // FIXME
-            else => error.not_actually_a_string,
-        };
-    } else return error.empty_line;
+fn one_cell_or_string(_: Dialect, _: []const u8) !union(enum) {
+    cell: i32,
+    label: []const u8,
+    constant: []const u8,
+    string: []const u8,
+} {
+    unreachable;
 }
 
-fn string_line_size(line: []const u8) !u32 {
-    return string_line_size_impl(false, line);
-}
-
-fn line_size(line: []const u8) !u32 {
-    var words = std.mem.tokenizeAny(u8, line, " \t\r");
-    if (words.peek() == null) return 0;
-    return while (words.next()) |word| {
-        break switch (word[0]) {
-            '>' => 0,
-            ':' => continue,
-            '"' => try string_line_size(line),
-            else => 1,
-        };
-    } else 1;
-}
-
-fn parse_line(_: []const u8) !i32 {
-    unreachable; // FIXME
-}
-
-test "everything" {
-    std.testing.refAllDecls(@This());
+fn free_keys_and_deinit(
+    allocator: std.mem.Allocator,
+    map: *Environment,
+) void {
+    var keys = map.keyIterator();
+    while (keys.next()) |key| {
+        allocator.free(key.*);
+    }
+    map.deinit();
 }
