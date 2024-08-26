@@ -85,18 +85,26 @@ pub fn parse(
                 }
             },
             .label => |label| {
-                try fixups.putNoClobber(
-                    current_address(memory.items),
-                    .{ .label = label },
-                );
-                try memory.append(0);
+                if (labels.get(label)) |value| {
+                    try memory.append(value);
+                } else {
+                    try fixups.putNoClobber(
+                        current_address(memory.items),
+                        .{ .label = label },
+                    );
+                    try memory.append(0);
+                }
             },
             .constant => |constant| {
-                try fixups.putNoClobber(
-                    current_address(memory.items),
-                    .{ .constant = constant },
-                );
-                try memory.append(0);
+                if (constants.get(constant)) |value| {
+                    try memory.append(value);
+                } else {
+                    try fixups.putNoClobber(
+                        current_address(memory.items),
+                        .{ .constant = constant },
+                    );
+                    try memory.append(0);
+                }
             },
         }
     }
