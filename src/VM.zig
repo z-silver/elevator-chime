@@ -79,7 +79,7 @@ pub fn Stack(comptime n: usize, comptime T: type) type {
 
 pub fn image_native_to_big(image: []i32) void {
     for (image, 0..) |value, idx| {
-        image[idx] = std.mem.nativeToBig(i32, value);
+        image[idx] = data.i32_to_big(value);
     }
 }
 
@@ -113,7 +113,7 @@ pub fn store(
         .mem => |addr| addr,
     };
     vm.ram[try vm.address(source)] =
-        std.mem.nativeToBig(i32, try vm.data_stack.top());
+        data.i32_to_big(try vm.data_stack.top());
     vm.data_stack.pop() catch unreachable;
 }
 
