@@ -2,6 +2,8 @@ const std = @import("std");
 const data = @import("data.zig");
 const assert = std.debug.assert;
 
+const i32_to_big = data.i32_to_big;
+
 pub const Dialect = std.StaticStringMap(data.Op);
 const Memory = std.ArrayList(i32);
 const Environment = std.StringHashMap(i32);
@@ -49,7 +51,8 @@ pub fn parse(
             ':' => blk: {
                 const entry = try labels.getOrPut(word[1..]);
                 if (entry.found_existing) return error.label_collision;
-                entry.value_ptr.* = current_address(memory.items);
+                const addr = current_address(memory.items);
+                entry.value_ptr.* = i32_to_big(addr);
                 break :blk rest;
             },
             '>' => {
@@ -211,12 +214,38 @@ fn one_word(subject: []const u8) ?[2][]const u8 {
     } else .{ no_leading_whitespace, &.{} };
 }
 
-fn one_cell_or_string(_: Dialect, _: []const u8) !union(enum) {
+fn one_cell_or_string(dialect: Dialect, subject: []const u8) !union(enum) {
     cell: i32,
     label: []const u8,
     constant: []const u8,
     string: []const u8,
 } {
+    const remaining = any_whitespace(subject);
+    return if (remaining.len == 0)
+        .{ .cell = 0 }
+    else switch (remaining[0]) {
+        '&' => .{ .label = try one_label_only(remaining[1..]) },
+        '*' => .{ .constant = try one_label_only(remaining[1..]) },
+        '#' => .{ .cell = i32_to_big(try one_number_only(remaining[1..])) },
+        '"' => .{ .string = try one_string_only(remaining) },
+        else => .{ .cell = i32_to_big(
+            try one_instruction_word_only(dialect, remaining),
+        ) },
+    };
+}
+
+fn one_label_only(_: []const u8) ![]const u8 {
+    unreachable;
+}
+
+fn one_string_only(_: []const u8) ![]const u8 {
+    unreachable;
+}
+fn one_number_only(_: []const u8) !i32 {
+    unreachable;
+}
+
+fn one_instruction_word_only(_: []const u8) !i32 {
     unreachable;
 }
 
