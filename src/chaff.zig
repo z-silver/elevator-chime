@@ -233,7 +233,7 @@ fn one_cell_or_string(dialect: Dialect, subject: []const u8) !union(enum) {
         '&' => .{ .label = try one_label_only(remaining[1..]) },
         '*' => .{ .constant = try one_label_only(remaining[1..]) },
         '#' => .{ .cell = i32_to_big(try one_number_only(remaining[1..])) },
-        '"' => .{ .string = try one_string_only(remaining) },
+        '"' => .{ .string = try one_string_only_no_opening(remaining) },
         else => .{ .cell = i32_to_big(
             try one_instruction_word_only(dialect, remaining),
         ) },
@@ -250,9 +250,16 @@ fn one_label_only(subject: []const u8) ![]const u8 {
     } else return error.name_cannot_be_empty;
 }
 
-fn one_string_only(_: []const u8) ![]const u8 {
-    unreachable;
+fn one_string_only_no_opening(subject: []const u8) ![]const u8 {
+    const closing_quote =
+        std.mem.lastIndexOfScalar(u8, subject, '"') orelse
+        return error.invalid_string;
+    return if (any_whitespace(subject[closing_quote..]).len != 0)
+        error.invalid_string
+    else
+        subject[0..closing_quote];
 }
+
 fn one_number_only(subject: []const u8) !i32 {
     if (one_word(subject)) |word_and_remaining| {
         const word, const remaining = word_and_remaining;
