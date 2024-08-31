@@ -12,9 +12,37 @@ const Fixups = std.AutoHashMap(
     union(enum) { label: []const u8, constant: []const u8 },
 );
 
+pub fn main() !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    const source = try std.io.getStdIn().readToEndAlloc(allocator, max_source_size);
+    var error_line: u32 = 0;
+    const stderr = std.io.getStdErr().writer();
+    const program = parse(
+        allocator,
+        lemos_dialect,
+        source,
+        &error_line,
+    ) catch |err| {
+        try stderr.print(
+            "Error on line {}, code: {}.\n",
+            .{ error_line, err },
+        );
+        return err;
+    };
+    std.io.getStdOut().writeAll(std.mem.sliceAsBytes(program)) catch |err| {
+        try stderr.print("Failed to write to stdout.\n", .{});
+        return err;
+    };
+    std.process.cleanExit();
+}
+
 fn current_address(items: []const i32) i32 {
     return @bitCast(@as(u32, @intCast(items.len)));
 }
+
+pub const max_source_size = std.math.maxInt(u32) + 1;
 
 pub fn parse(
     allocator: std.mem.Allocator,
@@ -25,7 +53,7 @@ pub fn parse(
     var current_line: u32 = 0;
     errdefer error_position.* = current_line;
 
-    if (std.math.maxInt(u32) + 1 < source.len) {
+    if (max_source_size < source.len) {
         return error.source_too_large;
     }
     var memory = Memory.init(allocator);
@@ -78,7 +106,7 @@ pub fn parse(
                 memory.appendAssumeCapacity(@bitCast(length_in_memory));
                 const target = memory.addManyAsSliceAssumeCapacity(words);
                 @memcpy(
-                    std.mem.asBytes(target[0..almost_words]),
+                    std.mem.sliceAsBytes(target)[0 .. string.len - trailing],
                     string[0 .. string.len - trailing],
                 );
                 if (trailing != 0) {
@@ -169,16 +197,19 @@ comptime {
     assert(instruction_set.eql(Instruction_Set.initFull()));
 }
 
-const whitespace = std.StaticStringMap(void).initComptime(.{
-    .{" "},
-    .{"\t"},
-});
+const whitespace = blk: {
+    var whitespace_set = std.StaticBitSet(std.math.maxInt(u8) + 1).initEmpty();
+    for (.{ ' ', '\t' }) |char| {
+        whitespace_set.set(char);
+    }
+    break :blk whitespace_set;
+};
 
 fn any_whitespace(subject: []const u8) []const u8 {
     return for (subject, 0..) |character, index| {
-        if (!whitespace.has(&.{character}))
+        if (!whitespace.isSet(character))
             break subject[index..];
-    } else subject;
+    } else &.{};
 }
 
 const With_Capture = struct {
@@ -200,15 +231,12 @@ fn one_line(subject: []const u8) ?[2][]const u8 {
 }
 
 fn one_word(subject: []const u8) ?[2][]const u8 {
-    return if (subject.len == 0 or whitespace.has(&.{subject[0]}))
+    return if (subject.len == 0 or whitespace.isSet(subject[0]))
         null
     else for (subject, 0..) |character, index| {
-        if (whitespace.has(&.{character})) {
+        if (whitespace.isSet(character)) {
             assert(index != 0);
-            break .{
-                subject[0 .. index - 1],
-                subject[index..],
-            };
+            break .{ subject[0..index], subject[index..] };
         }
     } else .{ subject, &.{} };
 }
@@ -216,7 +244,7 @@ fn one_word(subject: []const u8) ?[2][]const u8 {
 fn any_whitespace_one_word(subject: []const u8) ?[2][]const u8 {
     const no_leading_whitespace = any_whitespace(subject);
     if (no_leading_whitespace.len == 0) return null;
-    assert(!whitespace.has(&.{subject[0]}));
+    assert(!whitespace.isSet(no_leading_whitespace[0]));
     return one_word(no_leading_whitespace);
 }
 
@@ -233,7 +261,7 @@ fn one_cell_or_string(dialect: Dialect, subject: []const u8) !union(enum) {
         '&' => .{ .label = try one_label_only(remaining[1..]) },
         '*' => .{ .constant = try one_label_only(remaining[1..]) },
         '#' => .{ .cell = i32_to_big(try one_number_only(remaining[1..])) },
-        '"' => .{ .string = try one_string_only_no_opening(remaining) },
+        '"' => .{ .string = try one_string_only_no_opening(remaining[1..]) },
         else => .{ .cell = i32_to_big(
             try one_instruction_word_only(dialect, remaining),
         ) },
@@ -254,7 +282,7 @@ fn one_string_only_no_opening(subject: []const u8) ![]const u8 {
     const closing_quote =
         std.mem.lastIndexOfScalar(u8, subject, '"') orelse
         return error.invalid_string;
-    return if (any_whitespace(subject[closing_quote..]).len != 0)
+    return if (any_whitespace(subject[closing_quote + 1 ..]).len != 0)
         error.invalid_string
     else
         subject[0..closing_quote];
@@ -273,11 +301,11 @@ fn one_number_only(subject: []const u8) !i32 {
 
 fn one_instruction_word_only(dialect: Dialect, subject: []const u8) !i32 {
     var ops = std.mem.zeroes([data.Op.per_word]data.Op);
-    var remaining = subject;
+    var rest: []const u8 = subject;
     for (0..ops.len) |slot| {
-        const word, remaining = any_whitespace_one_word(subject) orelse break;
+        const word, rest = any_whitespace_one_word(rest) orelse break;
         ops[slot] = dialect.get(word) orelse return error.invalid_instruction;
-    } else if (any_whitespace(remaining).len != 0) return error.invalid_cell;
+    } else if (any_whitespace(rest).len != 0) return error.invalid_cell;
     return data.Code.from_slice(&ops).?.to_i32();
 }
 
