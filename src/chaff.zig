@@ -46,7 +46,7 @@ pub fn parse(
         current_line += 1;
         if (std.mem.indexOfScalar(u8, line, '\r')) |_|
             return error.line_contains_carriage_return;
-        const word, const rest = one_word(line) orelse continue;
+        const word, const rest = any_whitespace_one_word(line) orelse continue;
         const subject = switch (word[0]) {
             ':' => blk: {
                 const entry = try labels.getOrPut(word[1..]);
@@ -200,18 +200,24 @@ fn one_line(subject: []const u8) ?[2][]const u8 {
 }
 
 fn one_word(subject: []const u8) ?[2][]const u8 {
-    const no_leading_whitespace = any_whitespace(subject);
-    return if (no_leading_whitespace.len == 0)
+    return if (subject.len == 0 or whitespace.has(&.{subject[0]}))
         null
-    else for (no_leading_whitespace, 0..) |character, index| {
+    else for (subject, 0..) |character, index| {
         if (whitespace.has(&.{character})) {
             assert(index != 0);
             break .{
-                no_leading_whitespace[0 .. index - 1],
-                no_leading_whitespace[index..],
+                subject[0 .. index - 1],
+                subject[index..],
             };
         }
-    } else .{ no_leading_whitespace, &.{} };
+    } else .{ subject, &.{} };
+}
+
+fn any_whitespace_one_word(subject: []const u8) ?[2][]const u8 {
+    const no_leading_whitespace = any_whitespace(subject);
+    if (no_leading_whitespace.len == 0) return null;
+    assert(!whitespace.has(&.{subject[0]}));
+    return one_word(no_leading_whitespace);
 }
 
 fn one_cell_or_string(dialect: Dialect, subject: []const u8) !union(enum) {
@@ -234,19 +240,38 @@ fn one_cell_or_string(dialect: Dialect, subject: []const u8) !union(enum) {
     };
 }
 
-fn one_label_only(_: []const u8) ![]const u8 {
-    unreachable;
+fn one_label_only(subject: []const u8) ![]const u8 {
+    if (one_word(subject)) |word_and_remaining| {
+        const word, const remaining = word_and_remaining;
+        return if (any_whitespace(remaining).len != 0)
+            error.invalid_cell
+        else
+            word;
+    } else return error.name_cannot_be_empty;
 }
 
 fn one_string_only(_: []const u8) ![]const u8 {
     unreachable;
 }
-fn one_number_only(_: []const u8) !i32 {
-    unreachable;
+fn one_number_only(subject: []const u8) !i32 {
+    if (one_word(subject)) |word_and_remaining| {
+        const word, const remaining = word_and_remaining;
+        return if (any_whitespace(remaining).len != 0)
+            error.invalid_cell
+        else
+            std.fmt.parseInt(i32, word, 10) catch
+                @as(i32, @bitCast(try std.fmt.parseUnsigned(u32, word, 10)));
+    } else return error.number_cannot_be_empty;
 }
 
-fn one_instruction_word_only(_: []const u8) !i32 {
-    unreachable;
+fn one_instruction_word_only(dialect: Dialect, subject: []const u8) !i32 {
+    var ops = std.mem.zeroes([data.Op.per_word]data.Op);
+    var remaining = subject;
+    for (0..ops.len) |slot| {
+        const word, remaining = any_whitespace_one_word(subject) orelse break;
+        ops[slot] = dialect.get(word) orelse return error.invalid_instruction;
+    } else if (any_whitespace(remaining).len != 0) return error.invalid_cell;
+    return data.Code.from_slice(&ops).?.to_i32();
 }
 
 fn free_keys_and_deinit(
