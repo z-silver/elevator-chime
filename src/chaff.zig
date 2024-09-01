@@ -103,7 +103,7 @@ pub fn parse(
                 const trailing = string.len & 0b11;
                 const words = almost_words + @intFromBool(trailing != 0);
                 try memory.ensureUnusedCapacity(words + 1);
-                memory.appendAssumeCapacity(@bitCast(length_in_memory));
+                memory.appendAssumeCapacity(i32_to_big(@bitCast(length_in_memory)));
                 const target = memory.addManyAsSliceAssumeCapacity(words);
                 @memcpy(
                     std.mem.sliceAsBytes(target)[0 .. string.len - trailing],
