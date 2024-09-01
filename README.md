@@ -11,8 +11,10 @@ Elevator Chime is a Zig reimplementation of [Chime](https://github.com/Dr-Nekoma
 
 `zig build test` executes the triangle numbers and short multiplication example programs.
 
-`zig build chaff` reads a chaff assembly file from stdin, compiles it and writes it to stdout.
+`zig build chaff` reads a chaff assembly file from stdin, compiles it and writes the result to stdout.
 
-`zig build run -- <compiled-file>` executes a binary image.
+`zig build run -- <compiled-file>` loads and executes a compiled program.
+
+A plain `zig build` produces two executables: `elevator-chime`, which is the program called by `zig build run`, and `chaff`, which is called by `zig build chaff`.
 
 Written against Zig version `0.13.0`.
