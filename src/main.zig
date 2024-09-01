@@ -20,9 +20,5 @@ pub fn main() !void {
         null,
     );
     var vm = VM{ .ram = std.mem.bytesAsSlice(i32, image) };
-    for (vm.ram, 0..) |word, index| {
-        if (index == 8) break;
-        std.debug.print("word: {x}\n", .{word});
-    }
     try vm.run();
 }
