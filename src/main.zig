@@ -1,33 +1,28 @@
 const std = @import("std");
 const VM = @import("VM.zig");
-const chaff = @import("chaff.zig");
 
 pub fn main() !void {
-    var echo_image = comptime [_]i32{
-        VM.Code.from_slice(
-            &.{ .literal, .literal, .literal, .syscall },
-        ).?.to_i32(),
-        8,
-        0, // stdin
-        @intFromEnum(VM.Syscall.read),
-        VM.Code.from_slice(
-            &.{ .literal, .literal, .literal, .syscall, .halt },
-        ).?.to_i32(),
-        8,
-        1, // stdout
-        @intFromEnum(VM.Syscall.write),
-        // 8
-        30,
-    } ++ @as([8]i32, @bitCast([_]u8{'0'} ** 29 ++ .{ '\n', 0, 0 }));
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
 
-    VM.image_native_to_big(echo_image[0 .. echo_image.len - 8]);
-    var vm_storage = VM{ .ram = &echo_image };
-    const vm = &vm_storage;
+    const allocator = arena.allocator();
+    const args = try std.process.argsAlloc(allocator);
+    if (args.len < 2) return error.no_file_given;
 
+    const image_file = try std.fs.cwd().openFile(args[1], .{});
+    defer image_file.close();
+
+    const image = try image_file.readToEndAllocOptions(
+        allocator,
+        VM.max_ram_size,
+        null,
+        @alignOf(i32),
+        null,
+    );
+    var vm = VM{ .ram = std.mem.bytesAsSlice(i32, image) };
+    for (vm.ram, 0..) |word, index| {
+        if (index == 8) break;
+        std.debug.print("word: {x}\n", .{word});
+    }
     try vm.run();
-}
-
-test "everything" {
-    std.testing.refAllDecls(VM);
-    std.testing.refAllDecls(chaff);
 }

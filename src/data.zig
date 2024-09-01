@@ -3,6 +3,8 @@ const Int = std.meta.Int;
 
 pub const Code_Int = Int(.unsigned, 32 - Op.leftover_bits);
 
+pub const max_memory_size = std.math.maxInt(u32) + 1;
+
 pub fn i32_to_big(n: i32) i32 {
     return std.mem.nativeToBig(i32, n);
 }

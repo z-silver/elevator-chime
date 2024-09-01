@@ -8,6 +8,7 @@ pub const Code = data.Code;
 pub const Syscall = data.Syscall;
 
 const VM = @This();
+pub const max_ram_size = data.max_memory_size;
 
 ram: []i32,
 
