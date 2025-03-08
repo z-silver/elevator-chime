@@ -8,9 +8,11 @@ pub fn build(b: *std.Build) void {
 
     const vm = b.addExecutable(.{
         .name = "elevator-chime",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     const run_cmd = b.addRunArtifact(vm);
     run_cmd.step.dependOn(b.getInstallStep());
