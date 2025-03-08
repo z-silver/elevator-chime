@@ -2,6 +2,7 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
+    const no_bin = b.option(bool, "no-bin", "Skip emitting binary") orelse false;
 
     const optimize = b.standardOptimizeOption(.{});
 
@@ -11,7 +12,6 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(vm);
     const run_cmd = b.addRunArtifact(vm);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
@@ -26,7 +26,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(chaff);
+    if (no_bin) {
+        b.getInstallStep().dependOn(&vm.step);
+        b.getInstallStep().dependOn(&chaff.step);
+    } else {
+        b.installArtifact(vm);
+        b.installArtifact(chaff);
+    }
     const compile_cmd = b.addRunArtifact(chaff);
     compile_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {

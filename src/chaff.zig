@@ -188,7 +188,7 @@ pub const lemos_dialect = Dialect.initComptime(.{
 });
 
 comptime {
-    const total_opcodes = @typeInfo(data.Op).Enum.fields.len;
+    const total_opcodes = @typeInfo(data.Op).@"enum".fields.len;
     const Instruction_Set = std.StaticBitSet(total_opcodes);
     var instruction_set = Instruction_Set.initEmpty();
     for (lemos_dialect.values()) |op| {

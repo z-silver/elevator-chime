@@ -17,4 +17,4 @@ Elevator Chime is a Zig reimplementation of [Chime](https://github.com/Dr-Nekoma
 
 A plain `zig build` produces two executables: `elevator-chime`, which is the program called by `zig build run`, and `chaff`, which is called by `zig build chaff`.
 
-Written against Zig version `0.13.0`.
+Written against Zig version `0.14.0`.
