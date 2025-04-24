@@ -19,6 +19,6 @@ pub fn main() !void {
         @alignOf(i32),
         null,
     );
-    var vm = VM{ .ram = std.mem.bytesAsSlice(i32, image) };
+    var vm: VM = .init(std.mem.bytesAsSlice(i32, image));
     try vm.run();
 }

@@ -48,14 +48,14 @@ const instruction = struct {
 
     pub fn jump(vm: *VM) Error!void {
         vm.pc = try vm.load(.pc);
-        vm.isr = Code{};
+        vm.isr = .empty;
         return @call(.always_tail, next, .{vm});
     }
 
     pub fn jump_zero(vm: *VM) Error!void {
         if (try vm.data_stack.top() == 0) {
             vm.pc = try vm.load(.pc);
-            vm.isr = Code{};
+            vm.isr = .empty;
         } else {
             vm.pc +%= 1;
         }
@@ -66,7 +66,7 @@ const instruction = struct {
     pub fn jump_plus(vm: *VM) Error!void {
         if (0 < try vm.data_stack.top()) {
             vm.pc = try vm.load(.pc);
-            vm.isr = .{};
+            vm.isr = .empty;
         } else {
             vm.pc +%= 1;
         }
@@ -80,7 +80,7 @@ const instruction = struct {
             .isr = vm.isr,
         });
         vm.pc = try vm.load(.pc);
-        vm.isr = .{};
+        vm.isr = .empty;
         return @call(.always_tail, next, .{vm});
     }
 
@@ -108,7 +108,7 @@ const instruction = struct {
     }
 
     pub fn push_r(vm: *VM) Error!void {
-        try vm.return_stack.push(.{ .pc = try vm.data_stack.top() });
+        try vm.return_stack.push(.init(try vm.data_stack.top()));
         vm.data_stack.pop() catch unreachable;
         return @call(.always_tail, next, .{vm});
     }

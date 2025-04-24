@@ -12,27 +12,49 @@ pub const max_ram_size = data.max_memory_size;
 
 ram: []i32,
 
-data_stack: Data_Stack = .{},
-return_stack: Return_Stack = .{},
-pc: i32 = 0,
-isr: Code = .{},
-a: i32 = 0,
-done: bool = false,
+data_stack: Data_Stack,
+return_stack: Return_Stack,
+pc: i32,
+isr: Code,
+a: i32,
+done: bool,
+
+pub fn init(ram: []i32) VM {
+    return .{
+        .data_stack = .empty,
+        .return_stack = .empty,
+        .pc = 0,
+        .isr = .empty,
+        .a = 0,
+        .done = false,
+        .ram = ram,
+    };
+}
 
 const Data_Stack = Stack(64, i32);
 const Return_Stack = Stack(64, Return_Frame);
 
 pub const Return_Frame = struct {
     pc: i32,
-    isr: Code = .{},
+    isr: Code,
+
+    pub fn init(pc: i32) @This() {
+        return .{ .pc = pc, .isr = .empty };
+    }
 };
 
 pub fn Stack(comptime n: usize, comptime T: type) type {
     if (n < 8) @compileError("Stack capacity too small");
     return struct {
         const Stack_Size = Int(.unsigned, @bitSizeOf(@TypeOf(n)) - @clz(n));
-        size: Stack_Size = 0,
-        array: [n]T = undefined,
+
+        size: Stack_Size,
+        array: [n]T,
+
+        const empty: @This() = .{
+            .size = 0,
+            .array = undefined,
+        };
 
         pub const capacity: Stack_Size = n;
 

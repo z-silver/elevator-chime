@@ -10,7 +10,9 @@ pub fn i32_to_big(n: i32) i32 {
 }
 
 pub const Code = packed struct(Code_Int) {
-    int: Code_Int = 0,
+    int: Code_Int,
+
+    pub const empty: Code = .{ .int = 0 };
 
     pub inline fn from_i32(word: i32) Code {
         return .{ .int = @truncate(@as(u32, @bitCast(word)) >> Op.leftover_bits) };
@@ -72,7 +74,7 @@ pub const Code = packed struct(Code_Int) {
         return if (Op.per_word < ops.len)
             null
         else result: {
-            var word = Code{};
+            var word: Code = .empty;
             for (0..Op.per_word) |index| {
                 word = word.add(
                     if (index < ops.len)
