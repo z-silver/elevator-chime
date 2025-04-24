@@ -3,17 +3,16 @@ const VM = @import("VM.zig");
 const Error = VM.Error;
 const Code = VM.Code;
 
-inline fn next(vm: *VM) Error!void {
-    const current_instruction = vm.isr.current();
-    vm.isr = vm.isr.step();
-
-    return switch (current_instruction) {
-        inline else => |inst| @call(
-            .always_tail,
-            @field(instruction, @tagName(inst)),
-            .{vm},
-        ),
+fn jump_table(opcode: VM.Op) *const fn (*VM) Error!void {
+    return switch (opcode) {
+        inline else => |inst| @field(instruction, @tagName(inst)),
     };
+}
+
+fn next(vm: *VM) Error!void {
+    const opcode = vm.isr.current();
+    vm.isr = vm.isr.step();
+    return @call(.always_tail, jump_table(opcode), .{vm});
 }
 
 pub const start = instruction.nop;
