@@ -192,8 +192,8 @@ test "triangle numbers" {
     };
 
     image_native_to_big(&triangle_numbers_image);
-    var vm_storage = VM{ .ram = &triangle_numbers_image };
-    const vm = &vm_storage;
+    var vm_state: VM = .init(&triangle_numbers_image);
+    const vm = &vm_state;
 
     const result = vm.run();
 
@@ -233,8 +233,8 @@ test "short multiplication" {
         shift_16_left;
 
     image_native_to_big(&short_multiplication);
-    var vm_storage = VM{ .ram = &short_multiplication };
-    const vm = &vm_storage;
+    var vm_state: VM = .init(&short_multiplication);
+    const vm = &vm_state;
 
     const result = vm.run();
 

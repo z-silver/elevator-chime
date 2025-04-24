@@ -132,7 +132,7 @@ pub const Op = enum(op_backing_type) {
     }
 
     test "op defaults" {
-        const default_word = Op.array_from_code(.{});
+        const default_word = Op.array_from_code(.empty);
         try std.testing.expectEqual([_]Op{.pc_fetch} ** per_word, default_word);
     }
 

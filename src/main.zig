@@ -22,3 +22,7 @@ pub fn main() !void {
     var vm: VM = .init(std.mem.bytesAsSlice(i32, image));
     try vm.run();
 }
+
+test {
+    _ = VM;
+}
