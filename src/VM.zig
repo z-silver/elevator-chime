@@ -1,7 +1,6 @@
 const std = @import("std");
 const Int = std.meta.Int;
 const data = @import("data.zig");
-const execution = @import("execution.zig");
 
 pub const Op = data.Op;
 pub const Code = data.Code;
@@ -153,12 +152,264 @@ pub const Error = Data_Stack.Error || Return_Stack.Error || error{
     syscall_failed, // maybe this shouldn't be here
 };
 
-pub fn run(vm: *VM) Error!void {
-    return if (vm.done)
-        error.cannot_execute_after_halting
-    else
-        @call(.always_tail, execution.start, .{vm});
+fn next(vm: *VM) VM.Op {
+    const opcode = vm.isr.current();
+    vm.isr = vm.isr.step();
+    return opcode;
 }
+
+pub fn run(vm: *VM) Error!void {
+    if (vm.done) return error.cannot_execute_after_halting;
+    run: switch (Op.nop) {
+        .pc_fetch => {
+            vm.isr = Code.from_i32(try vm.load(.pc));
+            vm.pc +%= 1;
+            continue :run vm.next();
+        },
+
+        .jump => {
+            vm.pc = try vm.load(.pc);
+            vm.isr = .empty;
+            continue :run vm.next();
+        },
+
+        .jump_zero => {
+            if (try vm.data_stack.top() == 0) {
+                vm.pc = try vm.load(.pc);
+                vm.isr = .empty;
+            } else {
+                vm.pc +%= 1;
+            }
+            vm.data_stack.pop() catch unreachable;
+            continue :run vm.next();
+        },
+
+        .jump_plus => {
+            if (0 < try vm.data_stack.top()) {
+                vm.pc = try vm.load(.pc);
+                vm.isr = .empty;
+            } else {
+                vm.pc +%= 1;
+            }
+            vm.data_stack.pop() catch unreachable;
+            continue :run vm.next();
+        },
+
+        .call => {
+            try vm.return_stack.push(.{
+                .pc = vm.pc +% 1,
+                .isr = vm.isr,
+            });
+            vm.pc = try vm.load(.pc);
+            vm.isr = .empty;
+            continue :run vm.next();
+        },
+
+        .ret => {
+            const target = try vm.return_stack.top();
+            vm.return_stack.pop() catch unreachable;
+            vm.pc = target.pc;
+            vm.isr = target.isr;
+            continue :run vm.next();
+        },
+
+        .halt => {
+            vm.done = true;
+        },
+
+        .push_a => {
+            vm.a = try vm.data_stack.top();
+            vm.data_stack.pop() catch unreachable;
+            continue :run vm.next();
+        },
+
+        .pop_a => {
+            try vm.data_stack.push(vm.a);
+            continue :run vm.next();
+        },
+
+        .push_r => {
+            try vm.return_stack.push(.init(try vm.data_stack.top()));
+            vm.data_stack.pop() catch unreachable;
+            continue :run vm.next();
+        },
+
+        .pop_r => {
+            try vm.data_stack.push((try vm.return_stack.top()).pc);
+            vm.return_stack.pop() catch unreachable;
+            continue :run vm.next();
+        },
+
+        .over => {
+            const value, _ = try vm.data_stack.top2();
+            try vm.data_stack.push(value);
+            continue :run vm.next();
+        },
+
+        .dup => {
+            try vm.data_stack.push(try vm.data_stack.top());
+            continue :run vm.next();
+        },
+
+        .drop => {
+            try vm.data_stack.pop();
+            continue :run vm.next();
+        },
+
+        .swap => {
+            const top = try vm.data_stack.top2();
+            vm.data_stack.pop2() catch unreachable;
+            vm.data_stack.push(top[1]) catch unreachable;
+            vm.data_stack.push(top[0]) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .load_a => {
+            try vm.data_stack.push(try vm.load(.a));
+            continue :run vm.next();
+        },
+
+        .store_a => {
+            try vm.store(.a);
+            continue :run vm.next();
+        },
+
+        .load_a_plus => {
+            try vm.data_stack.push(try vm.load(.a));
+            vm.a +%= 1;
+            continue :run vm.next();
+        },
+
+        .store_a_plus => {
+            try vm.store(.a);
+            vm.a +%= 1;
+            continue :run vm.next();
+        },
+
+        .load_r_plus => {
+            const target = try vm.return_stack.top();
+            try vm.data_stack.push(try vm.load(.r));
+            vm.return_stack.pop() catch unreachable;
+            vm.return_stack.push(.{
+                .pc = target.pc +% 1,
+                .isr = target.isr,
+            }) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .store_r_plus => {
+            const target = try vm.return_stack.top();
+            try vm.store(.r);
+            vm.return_stack.pop() catch unreachable;
+            vm.return_stack.push(.{
+                .pc = target.pc +% 1,
+                .isr = target.isr,
+            }) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .literal => {
+            try vm.data_stack.push(try vm.load(.pc));
+            vm.pc +%= 1;
+            continue :run vm.next();
+        },
+
+        .@"and" => {
+            const top = try vm.data_stack.top2();
+            vm.data_stack.pop2() catch unreachable;
+            vm.data_stack.push(top[0] & top[1]) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .not => {
+            const top = try vm.data_stack.top();
+            vm.data_stack.pop() catch unreachable;
+            vm.data_stack.push(~top) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .@"or" => {
+            const top = try vm.data_stack.top2();
+            vm.data_stack.pop2() catch unreachable;
+            vm.data_stack.push(top[0] | top[1]) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .xor => {
+            const top = try vm.data_stack.top2();
+            vm.data_stack.pop2() catch unreachable;
+            vm.data_stack.push(top[0] ^ top[1]) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .plus => {
+            const top = try vm.data_stack.top2();
+            vm.data_stack.pop2() catch unreachable;
+            vm.data_stack.push(top[0] +% top[1]) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .double => {
+            const top = try vm.data_stack.top();
+            vm.data_stack.pop() catch unreachable;
+            vm.data_stack.push(top << 1) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .half => {
+            const top = try vm.data_stack.top();
+            vm.data_stack.pop() catch unreachable;
+            vm.data_stack.push(top >> 1) catch unreachable;
+            continue :run vm.next();
+        },
+
+        .plus_star => {
+            const top = try vm.data_stack.top2();
+            if (top[1] & 1 == 1) {
+                vm.data_stack.pop() catch unreachable;
+                vm.data_stack.push(top[0] +% top[1]) catch unreachable;
+            }
+            continue :run vm.next();
+        },
+
+        .nop => {
+            continue :run vm.next();
+        },
+
+        .syscall => {
+            const top: u32 = @bitCast(try vm.data_stack.top());
+            const syscall_id = std.meta.intToEnum(VM.Syscall, top) catch
+                return error.unknown_syscall;
+            vm.data_stack.pop() catch unreachable;
+            try switch (syscall_id) {
+                inline else => |id| @field(system, @tagName(id))(vm),
+            };
+            continue :run vm.next();
+        },
+    }
+}
+
+const system = struct {
+    pub fn read(vm: *VM) Error!void {
+        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
+        vm.data_stack.pop2() catch unreachable;
+        const buf = try vm.buffer_at(buf_addr);
+        const bytes_read = std.posix.read(fd, buf) catch
+            return error.syscall_failed;
+        vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_read)))) catch
+            unreachable;
+    }
+
+    pub fn write(vm: *VM) Error!void {
+        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
+        vm.data_stack.pop2() catch unreachable;
+        const buf = try vm.buffer_at(buf_addr);
+        const bytes_written = std.posix.write(fd, buf) catch
+            return error.syscall_failed;
+        vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_written)))) catch
+            unreachable;
+    }
+};
 
 test "triangle numbers" {
     var triangle_numbers_image = comptime [_]i32{
