@@ -5,7 +5,7 @@ const assert = std.debug.assert;
 const i32_to_big = data.i32_to_big;
 
 pub const Dialect = std.StaticStringMap(data.Op);
-const Memory = std.ArrayListUnmanaged(i32);
+const Memory = std.ArrayList(i32);
 const Environment = std.StringHashMapUnmanaged(i32);
 const Fixups = std.AutoHashMapUnmanaged(
     i32,
