@@ -13,12 +13,30 @@ const Fixups = std.AutoHashMapUnmanaged(
 );
 
 pub fn main() !void {
+    const File = std.fs.File;
+
     var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const source = try std.io.getStdIn().readToEndAlloc(arena, max_source_size);
+
+    const source: []u8 = source: {
+        var in_buffer: [1024]u8 = undefined;
+        var stdin_file: File.Reader = .init(.stdin(), &in_buffer);
+
+        break :source try stdin_file.interface.allocRemaining(
+            arena,
+            @enumFromInt(max_source_size),
+        );
+    };
+
     var error_line: u32 = 0;
-    const stderr = std.io.getStdErr().writer();
+
+    var err_buffer: [1024]u8 = undefined;
+    var stderr_file: File.Writer = .init(.stderr(), &err_buffer);
+
+    const stderr = &stderr_file.interface;
+    defer stderr.flush() catch {};
+
     const program = parse(
         arena,
         lemos_dialect,
@@ -31,11 +49,17 @@ pub fn main() !void {
         );
         return err;
     };
-    std.io.getStdOut().writeAll(std.mem.sliceAsBytes(program)) catch |err| {
+
+    var out_buffer: [1024]u8 = undefined;
+    var stdout_file: File.Writer = .init(.stdout(), &out_buffer);
+    const stdout = &stdout_file.interface;
+
+    stdout.writeAll(std.mem.sliceAsBytes(program)) catch |err| {
         try stderr.print("Failed to write to stdout.\n", .{});
         return err;
     };
-    std.process.cleanExit();
+
+    try stdout.flush();
 }
 
 fn current_address(items: []const i32) i32 {
