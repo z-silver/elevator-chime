@@ -44,7 +44,7 @@ pub const Code = packed struct(Code_Int) {
         try std.testing.expectEqual(initial, final);
     }
 
-    pub inline fn current(code: Code) Op {
+    pub fn current(code: Code) Op {
         return @enumFromInt(@as(op_backing_type, @truncate(
             code.int >> (@bitSizeOf(Op) * (Op.per_word - 1)),
         )));
