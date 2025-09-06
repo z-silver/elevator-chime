@@ -16,7 +16,7 @@ pub fn main() !void {
         arena,
         VM.max_ram_size,
         null,
-        @alignOf(i32),
+        .of(i32),
         null,
     );
     var vm: VM = .init(std.mem.bytesAsSlice(i32, image));
