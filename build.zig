@@ -6,14 +6,17 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
+    const main_module = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const vm = b.addExecutable(.{
         .name = "elevator-chime",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = main_module,
     });
+
     const run_cmd = b.addRunArtifact(vm);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
@@ -22,13 +25,15 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    const chaff_module = b.createModule(.{
+        .root_source_file = b.path("src/chaff.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const chaff = b.addExecutable(.{
         .name = "chaff",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/chaff.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = chaff_module,
     });
     if (no_bin) {
         b.getInstallStep().dependOn(&vm.step);
@@ -47,19 +52,20 @@ pub fn build(b: *std.Build) void {
 
     // Creates a step for unit testing. This only builds the test executable
     // but does not run it.
-    const unit_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+    const main_tests = b.addTest(.{
+        .root_module = main_module,
+    });
+    const chaff_tests = b.addTest(.{
+        .root_module = chaff_module,
     });
 
-    const run_unit_tests = b.addRunArtifact(unit_tests);
+    const run_main_tests = b.addRunArtifact(main_tests);
+    const run_chaff_tests = b.addRunArtifact(chaff_tests);
 
     // Similar to creating the run step earlier, this exposes a `test` step to
     // the `zig build --help` menu, providing a way for the user to request
     // running the unit tests.
     const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_unit_tests.step);
+    test_step.dependOn(&run_main_tests.step);
+    test_step.dependOn(&run_chaff_tests.step);
 }
