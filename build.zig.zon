@@ -1,6 +1,6 @@
 .{
     .name = .elevator_chime,
-    .fingerprint = 0x7de9eecdfd6fed3e,
+    .fingerprint = 0x7de9eecdfd6fed3e, // Changing this has security and trust implications.
     .version = "0.0.1",
     .minimum_zig_version = "0.15.1",
     .paths = .{"src"},
