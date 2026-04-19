@@ -9,6 +9,7 @@ pub const Syscall = data.Syscall;
 const VM = @This();
 pub const max_ram_size = data.max_memory_size;
 
+io: std.Io,
 ram: []i32,
 
 data_stack: Data_Stack,
@@ -18,8 +19,9 @@ isr: Code,
 a: i32,
 done: bool,
 
-pub fn init(ram: []i32) VM {
+pub fn init(io: std.Io, ram: []i32) VM {
     return .{
+        .io = io,
         .data_stack = .empty,
         .return_stack = .empty,
         .pc = 0,
@@ -378,7 +380,7 @@ pub fn run(vm: *VM) Error!void {
 
         .syscall => {
             const top: u32 = @bitCast(try vm.data_stack.top());
-            const syscall_id = std.meta.intToEnum(VM.Syscall, top) catch
+            const syscall_id = std.enums.fromInt(VM.Syscall, top) orelse
                 return error.unknown_syscall;
             vm.data_stack.pop() catch unreachable;
             try switch (syscall_id) {
@@ -401,11 +403,25 @@ const system = struct {
     }
 
     pub fn write(vm: *VM) Error!void {
-        const buf_addr, const fd: std.posix.fd_t = try vm.data_stack.top2();
+        const source_addr, const handle: std.Io.File.Handle =
+            try vm.data_stack.top2();
+
+        const file: std.Io.File = .{
+            .handle = handle,
+            .flags = .{ .nonblocking = false },
+        };
+        var write_buf: [512]u8 = undefined;
+        var writer = file.writer(vm.io, &write_buf);
+
         vm.data_stack.pop2() catch unreachable;
-        const buf = try vm.buffer_at(buf_addr);
-        const bytes_written = std.posix.write(fd, buf) catch
+
+        const source = try vm.buffer_at(source_addr);
+        var reader = std.Io.Reader.fixed(source);
+
+        const bytes_written = reader.streamRemaining(&writer.interface) catch
             return error.syscall_failed;
+
+        writer.flush() catch return error.syscall_failed;
         vm.data_stack.push(@bitCast(@as(u32, @truncate(bytes_written)))) catch
             unreachable;
     }

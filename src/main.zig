@@ -1,25 +1,25 @@
 const std = @import("std");
 const VM = @import("VM.zig");
 
-pub fn main() !void {
-    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena_state.deinit();
+pub fn main(init: std.process.Init) !void {
+    const arena = init.arena.allocator();
+    const io = init.io;
 
-    const arena = arena_state.allocator();
-    const args = try std.process.argsAlloc(arena);
+    const args = try init.minimal.args.toSlice(arena);
     if (args.len < 2) return error.no_file_given;
 
-    const image_file = try std.fs.cwd().openFile(args[1], .{});
-    defer image_file.close();
+    const image_file = try std.Io.Dir.cwd().openFile(io, args[1], .{});
+    defer image_file.close(io);
 
-    const image = try image_file.readToEndAllocOptions(
+    var image_reader = image_file.reader(io, &.{});
+
+    const image = try image_reader.interface.allocRemainingAlignedSentinel(
         arena,
-        VM.max_ram_size,
-        null,
+        .limited(VM.max_ram_size),
         .of(i32),
         null,
     );
-    var vm: VM = .init(std.mem.bytesAsSlice(i32, image));
+    var vm: VM = .init(io, std.mem.bytesAsSlice(i32, image));
     try vm.run();
 }
 

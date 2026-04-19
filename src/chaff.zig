@@ -12,16 +12,14 @@ const Fixups = std.AutoHashMapUnmanaged(
     union(enum) { label: []const u8, constant: []const u8 },
 );
 
-pub fn main() !void {
-    const File = std.fs.File;
-
-    var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
+pub fn main(init: std.process.Init) !void {
+    const File = std.Io.File;
+    const arena = init.arena.allocator();
+    const io = init.io;
 
     const source: []u8 = source: {
         var in_buffer: [1024]u8 = undefined;
-        var stdin_file: File.Reader = .init(.stdin(), &in_buffer);
+        var stdin_file: File.Reader = .init(.stdin(), io, &in_buffer);
 
         break :source try stdin_file.interface.allocRemaining(
             arena,
@@ -32,7 +30,7 @@ pub fn main() !void {
     var error_line: u32 = 0;
 
     var err_buffer: [1024]u8 = undefined;
-    var stderr_file: File.Writer = .init(.stderr(), &err_buffer);
+    var stderr_file: File.Writer = .init(.stderr(), io, &err_buffer);
 
     const stderr = &stderr_file.interface;
     defer stderr.flush() catch {};
@@ -51,7 +49,7 @@ pub fn main() !void {
     };
 
     var out_buffer: [1024]u8 = undefined;
-    var stdout_file: File.Writer = .init(.stdout(), &out_buffer);
+    var stdout_file: File.Writer = .init(.stdout(), io, &out_buffer);
     const stdout = &stdout_file.interface;
 
     stdout.writeAll(std.mem.sliceAsBytes(program)) catch |err| {
